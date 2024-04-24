@@ -1,0 +1,77 @@
+---
+title: "SRWC-seedbank_greenhouse_prelim-analysis"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2023-11-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+```
+
+## Read in Data
+
+csv file for SRWC seedbank greenhouse study
+
+```{r read-files}
+
+greenhouse.n <- read.csv(here("Data", "SRWC-seedbank_greenhouse_2024-02-16_n.csv"), header = TRUE)
+
+greenhouse.n$X <- NULL
+
+
+```
+
+
+
+## Summarize for species richness
+
+summarize by date
+```{r summarize-date}
+
+# switch to long format (same data)
+greenhouse.long <- greenhouse.n %>% 
+  pivot_longer(cols = RF.1A.N:CONTROL.N, names_to = "Plot", values_to = "Count")
+
+# summary by date
+greenhouse.summary <- greenhouse.long %>% 
+  group_by(Date, Observer, Plot) %>% 
+  dplyr::summarise(
+    Richness = sum(Count>0, na.rm = TRUE))
+
+
+```
+
+summarize across dates for max species richness
+```{r summarize-max}
+
+greenhouse.max <- greenhouse.long %>% 
+  group_by(Plot, Species) %>% 
+  dplyr::summarise(
+    count.max = max(Count, na.rm = FALSE))
+
+greenhouse.max.summary <- greenhouse.max %>%
+  group_by(Plot) %>%
+  dplyr::summarise(
+    greenhouse.richness = sum(count.max > 0, na.rm = TRUE)
+  )
+
+greenhouse.max.summary
+
+```
+
+# Field data
+Read it in, organize and summarize it in the same way to match the greenhouse.max.summary dataset
+
+
+
+# Combine field and greenhouse data
+Use the function left_join(dataframe1, dataframe2, by = "plot")
+```{r join-dfs}
+
+```
+

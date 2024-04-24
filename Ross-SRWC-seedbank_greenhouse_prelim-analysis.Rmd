@@ -1,0 +1,325 @@
+---
+title: "SRWC-seedbank_greenhouse_prelim-analysis"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2023-11-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+
+# Color Options:
+
+color.palatte <- c("mediumblue", "darkred") 
+fun.palatte <- c("darkolivegreen","darkgoldenrod")
+```
+
+## Read in Data
+
+csv file for SRWC seedbank greenhouse study
+
+```{r read-files}
+
+##greenhouse.n <- SRWC_seedbank_greenhouse_2024_02_21_n
+  
+greenhouse.n <- read.csv(here("SRWC-seedbank_greenhouse_2024-02-21_n.csv"), header = TRUE)
+
+greenhouse.n$X <- NULL
+
+
+```
+
+
+
+## Summarize for species richness
+
+summarize by date
+```{r summarize-date}
+
+# switch to long format (same data)
+greenhouse.long <- greenhouse.n %>% 
+  pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count")
+
+# summary by date
+greenhouse.summary <- greenhouse.long %>% 
+  group_by(date, observer, plot) %>% 
+  dplyr::summarise(
+    Richness = sum(count>0, na.rm = TRUE))
+
+View(greenhouse.summary)
+
+```
+
+summarize across dates for max species richness
+```{r summarize-max}
+
+greenhouse.max <- greenhouse.long %>% 
+  group_by(plot, species) %>% 
+  dplyr::summarise(
+    count.max = max(count, na.rm = FALSE))
+
+greenhouse.max.summary <- greenhouse.max %>%
+  group_by(plot) %>%
+  dplyr::summarise(
+    greenhouse.richness = sum(count.max > 0, na.rm = TRUE)
+  )
+
+greenhouse.max.summary
+
+```
+
+# Field data
+Read it in, organize and summarize it in the same way to match the greenhouse.max.summary dataset
+
+
+
+# Combine field and greenhouse data
+Use the function left_join(dataframe1, dataframe2, by = "plot")
+```{r read-data-2}
+
+field.data <- SRWC_seedbank_plant_survey_2024_02_26
+
+##field.data <- read.csv(here("SRWC_seedbank_plant_survey_2024_02_26.csv"), header = TRUE)
+
+```
+
+Summarize field data 
+
+```{r summarize-data-2}
+
+
+field.summary <- field.data %>%
+  group_by(plot, habitat) %>%
+  dplyr::summarise(
+    field.richness = sum(species.count > 0, na.rm = TRUE))
+
+field.summary
+
+```
+
+# Combine field and greenhouse data
+Use the function left_join(dataframe1, dataframe2, by = "plot")
+```{r join-data-1}
+
+combined.sum <- left_join(greenhouse.max.summary, field.summary, by = "plot")
+
+```
+
+# Omit missing data (control)
+```{r omit-data-1}
+
+combined.summary <- na.omit(combined.sum)
+
+```
+
+
+# Begin linear regression:
+```{r regress-data-1}
+
+combined.lm = lm(greenhouse.richness ~ field.richness, data = combined.summary)
+
+combined.lm
+
+summary(combined.lm)
+```
+# Begin linear regression:
+```{r graph-regression-1}
+
+GH.vs.field.regression <- ggplot(combined.summary, aes(x=field.richness, y=greenhouse.richness)) +
+    geom_point()+
+    theme_classic()+
+    xlab("Field Richness")+
+    ylab("Greehouse Richness")+
+         geom_smooth(method=lm, color="darkgreen", fill="olivedrab")
+
+GH.vs.field.regression
+
+ggsave(plot = GH.vs.field.regression, filename = "figures/GH-vs-field-regression.png", width = 6, height = 4, units = "in")
+
+```
+# Do an anova to compare habitat type:
+
+# Field - Looking at distribution:
+```{r anova-1}
+
+boxplot(field.richness~habitat, data=combined.summary, main="Field Richness by Habitat Type", xlab = "Habitat", ylab = "Species Richness")
+```
+```{r ggboxplot-1}
+  
+field.richness.by.habitat <- combined.summary %>%
+      ggplot(aes(x=habitat, y=field.richness))+
+      geom_boxplot(aes(fill=habitat, col = fun.palatte), colour="black") +
+      labs(x= "Habitat Type", y="Field Species Richness")+
+      theme_classic() +
+        scale_x_discrete(labels=c("Actual Meadow", "Potential Meadow", "N/A")) +
+        scale_y_continuous(limits=c(5,25), breaks=c(5, 10, 15, 20, 25))+
+        scale_fill_manual(values= fun.palatte) +
+  theme(legend.position = "none")
+
+field.richness.by.habitat
+
+ggsave(plot = field.richness.by.habitat, filename = "figures/field_richness_by_habitat.png", width = 6, height = 4, units = "in")
+```
+
+#Field ANOVA time:
+```{r anova-4}
+
+fieldrichness.aov = aov(field.richness~habitat, data=combined.summary)
+
+  summary(fieldrichness.aov)
+  
+```
+# Greenhouse - Looking at distribution:
+```{r anova-5}
+
+boxplot(greenhouse.richness~habitat, data=combined.summary, main="Greenhouse Richness by Habitat Type", xlab = "Habitat", ylab = "Species Richness") 
+ 
+```
+#Greehouse ANOVA time:
+```{r ggboxplot-2}
+  
+GH.richness.by.habitat <- combined.summary %>%
+      ggplot(aes(x=habitat, y=greenhouse.richness))+
+      geom_boxplot(aes(fill=habitat, col = color.palatte), colour="black") +
+      labs(x= "Habitat Type", y="Greenhouse Species Richness")+
+      theme_classic() +
+        scale_x_discrete(labels=c("Actual Meadow", "Potential Meadow", "N/A")) +
+        scale_y_continuous(limits=c(0,15), breaks=c(0, 5, 10, 15))+
+        scale_fill_manual(values= fun.palatte)+
+        theme(legend.position = "none")
+
+GH.richness.by.habitat
+
+ggsave(plot = GH.richness.by.habitat, filename = "figures/GH_richness_by_habitat.png", width = 6, height = 4, units = "in")
+
+```
+
+#Greehouse ANOVA time:
+
+```{r anova-6}
+
+greenhouserichness.aov = aov(greenhouse.richness~habitat, data=combined.summary)
+
+  summary(greenhouserichness.aov)
+  
+```
+#Two way ANOVA?:
+```{r anova-7}
+
+habitat.richness = aov(field.richness ~ habitat*greenhouse.richness, data=combined.summary)
+
+summary(habitat.richness)
+  
+```
+#Soil moisture 
+```{r sm-read data}
+
+soil.moisture <- SRWC_seedbank_soil_moisture_2023_09_20
+
+combined.summary <- left_join(combined.summary, soil.moisture, by = c("plot","habitat"))
+  
+```
+
+#soil moisture summary 
+
+```{r SM-summarize-data}
+
+moisture.lm = lm(moisture.content ~ habitat, data = soil.moisture)
+
+moisture.lm
+
+summary(moisture.lm)
+
+```
+#soil moisture ANOVA boxplot 
+```{r SM-ggboxplot-1}
+  
+soil.moisture.plot <- soil.moisture %>%
+      ggplot(aes(x=habitat, y=moisture.content))+
+      geom_boxplot(aes(fill=habitat, col = color.palatte), colour="black") +
+      labs(x= "Habitat Type", y="Soil Moisture Content (%)")+
+      theme_classic() +
+        scale_x_discrete(labels=c("Actual Meadow", "Potential Meadow")) +
+        scale_y_continuous(limits=c(0,100), breaks=c(0, 25, 50, 75, 100))+
+        scale_fill_manual(values= fun.palatte)+
+        theme(legend.position = "none")
+
+soil.moisture.plot
+
+ggsave(plot = soil.moisture.plot, filename = "figures/soil-moisture-plot.png", width = 6, height = 4, units = "in")
+    
+```
+
+#soil moisture ANOVA time!! 
+
+```{r anova-8}
+
+soilmoisture.aov = aov(moisture.content~habitat, data=soil.moisture)
+
+  summary(soilmoisture.aov)
+  
+```
+```{r SM-regress-data}
+
+SMfield.lm = lm(field.richness ~ moisture.content, data=combined.summary)
+
+SMfield.lm
+
+summary(SMfield.lm)
+
+```
+```{r SM-regress-data-2}
+
+SMGH.lm = lm(greenhouse.richness ~ moisture.content, data=combined.summary)
+
+SMGH.lm
+
+summary(SMGH.lm)
+
+```
+```{r anova-9}
+
+habitat.richness = aov(field.richness ~ habitat*moisture.content, data=combined.summary)
+
+summary(habitat.richness)
+
+habitat.richness.2 = aov(greenhouse.richness ~ habitat*moisture.content, data=combined.summary)
+
+summary(habitat.richness.2)
+  
+```
+
+```{r anova-10}
+
+habitat.names <- c(a="Actual Meadow", p="Potential Meadow")
+
+field.richness.vs.soil.moisture <- ggplot(combined.summary, aes(x=moisture.content, y=field.richness)) +
+  facet_wrap(vars(habitat),labeller=labeller(habitat=habitat.names), scales="free_x")+
+    geom_point()+
+    theme_classic()+
+    xlab("Soil Moisture Content (%)")+
+    ylab("Field Richness")+
+         geom_smooth(method=lm, color="darkgreen", fill="olivedrab")
+
+field.richness.vs.soil.moisture
+
+ggsave(plot = field.richness.vs.soil.moisture, filename = "figures/field_richness_vs_soil_moisture.png", width = 6, height = 4, units = "in")
+
+GH.richness.vs.soil.moisture <- ggplot(combined.summary, aes(x=moisture.content, y=greenhouse.richness)) +
+  facet_wrap(vars(habitat),labeller=labeller(habitat=habitat.names), scales="free_x")+
+    geom_point()+
+    theme_classic()+
+    xlab("Soil Moisture Content (%)")+
+    ylab("Greenhouse Richness")+
+         geom_smooth(method=lm, color="darkgreen", fill="olivedrab")
+
+GH.richness.vs.soil.moisture
+
+ggsave(plot = field.richness.vs.soil.moisture, filename = "figures/GH_richness_vs_soil_moisture.png", width = 6, height = 4, units = "in")
+
+
+```
