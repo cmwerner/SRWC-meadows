@@ -24,9 +24,9 @@ csv file for SRWC seedbank greenhouse study
 
 ```{r read-files}
 
-##greenhouse.n <- SRWC_seedbank_greenhouse_2024_02_21_n
+greenhouse.n <- SRWC_seedbank_greenhouse_2024_02_21_n
   
-greenhouse.n <- read.csv(here("SRWC-seedbank_greenhouse_2024-02-21_n.csv"), header = TRUE)
+##greenhouse.n <- read.csv(here("SRWC-seedbank_greenhouse_2024-02-21_n.csv"), header = TRUE)
 
 greenhouse.n$X <- NULL
 
@@ -53,22 +53,41 @@ greenhouse.summary <- greenhouse.long %>%
 View(greenhouse.summary)
 
 ```
-
 summarize across dates for max species richness
-```{r summarize-max}
+```{r summarize-date}
 
-greenhouse.max <- greenhouse.long %>% 
-  group_by(plot, species) %>% 
+# switch to long format (same data)
+greenhouse.long <- greenhouse.n %>% 
+  pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count")
+
+# summary by species max count
+greenhouse.sum <- greenhouse.long %>% 
+  group_by(species, plot) %>% 
   dplyr::summarise(
-    count.max = max(count, na.rm = FALSE))
+    count.max = max(count, na.rm = TRUE)) %>%
+  filter(count.max > 0)
 
-greenhouse.max.summary <- greenhouse.max %>%
+#View(greenhouse.sum)
+
+# remove species present in control trays
+control.species <- greenhouse.sum %>% 
+  filter(plot == "control") %>% 
+  select(species) %>% 
+  unlist()
+
+greenhouse.sum.clean <- greenhouse.sum %>%
+  filter(!(species %in% control.species))
+
+
+# summarize by plots for richness
+greenhouse.max.summary <- greenhouse.sum.clean %>%
   group_by(plot) %>%
   dplyr::summarise(
     greenhouse.richness = sum(count.max > 0, na.rm = TRUE)
   )
 
 greenhouse.max.summary
+
 
 ```
 
