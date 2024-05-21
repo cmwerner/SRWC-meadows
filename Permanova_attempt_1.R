@@ -30,9 +30,17 @@ perma.1
 
 
 
-##Code for plotting:
- ## jaccard.dist <- vegdist(*whatever you called your just species matrix*, method=‘jaccard’)
-## nmds <- metaMDS(jaccard.dist, k=2, tol=0.001, maxit=50)
-## plot(nmds, type=‘n’)
-## points(speciesmatrix, pch=19, col=colvec[data$habitat])
-## ordiellipse(speciesmatrix, data$habitat)
+## Code for plotting NMDS
+
+jaccard.dist <- vegdist(sp.matrix, method="jaccard")
+nmds <- metaMDS(jaccard.dist, k=2, tol=0.001, maxit=100) # figures out where the points should go
+
+nmdsPlot <- tibble(x=nmds$points[,1], y=nmds$points[,2])
+nmdsPlot[,c('meadow','habitat','transect','plot')] <- 
+  field.wide[,c('meadow','habitat','transect','plot')]
+
+ggplot(nmdsPlot, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
+  geom_point(size=2) + 
+  theme_bw() +
+  xlab('NMDS 1') +
+  ylab('NMDS 2')
