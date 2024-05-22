@@ -3,7 +3,7 @@ library(tidyverse)
 library(here)
 
 field.data <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"), header = TRUE)
-gh.data <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-02-21_n.csv"), header = TRUE)
+gh.data <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"), header = TRUE)
 
 # removing duplicate rows
 dup.1 <- which(field.data$plot == "rf.6.a" & field.data$species.code == "unkfb")[2]
