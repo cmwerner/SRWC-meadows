@@ -2,6 +2,7 @@ library(vegan)
 library(tidyverse)
 library(here)
 
+### Field data --------------
 field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"), header = TRUE)
 
 # removing duplicate rows
@@ -9,7 +10,7 @@ dup.1 <- which(field.data.raw$plot == "rf.6.a" & field.data.raw$species.code == 
 dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == "sidore")[2]
 drop <- c(dup.1, dup.2)
 
-field.data.raw <- field.data %>% filter(!row_number() %in% drop)
+field.data <- field.data.raw %>% filter(!row_number() %in% drop)
 
 # switching to wide format for vegan
 field.wide <- field.data %>%
@@ -44,3 +45,11 @@ ggplot(nmdsPlot, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
   theme_bw() +
   xlab('NMDS 1') +
   ylab('NMDS 2')
+
+
+## Greenhouse data ---------------
+
+# using greenhouse.sum.clean data from Rmd file
+
+
+greenhouse.sum.clean
