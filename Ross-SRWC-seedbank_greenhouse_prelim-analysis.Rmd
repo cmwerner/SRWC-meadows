@@ -30,8 +30,6 @@ greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"),
 
 greenhouse.n$X <- NULL
 
-greenhouse.n$species <- greenhouse.n$species %>% trimws()
-
 
 ```
 
@@ -112,6 +110,7 @@ dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == 
 drop <- c(dup.1, dup.2)
 
 field.data <- field.data.raw %>% filter(!row_number() %in% drop)
+
 
 ```
 
@@ -349,7 +348,7 @@ GH.richness.vs.soil.moisture <- ggplot(combined.summary, aes(x=moisture.content,
 
 GH.richness.vs.soil.moisture
 
-ggsave(plot = field.richness.vs.soil.moisture, filename = "figures/GH_richness_vs_soil_moisture.png", width = 6, height = 4, units = "in")
+ggsave(plot = GH.richness.vs.soil.moisture, filename = "figures/GH_richness_vs_soil_moisture.png", width = 6, height = 4, units = "in")
 
 
 ```

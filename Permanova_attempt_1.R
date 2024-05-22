@@ -53,21 +53,21 @@ ggplot(nmdsPlot, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
 ggsave(plot = nmdsPlot , filename = "figures/NMDS_species_field.data.png", width = 6, height = 4, units = "in")
 
 ## Greenhouse data ---------------
-greenhouse.sum.clean 
+view(greenhouse.sum.clean)
 
 # using greenhouse.sum.clean data from Rmd file
 
 # switching to wide format for vegan
 greenhouse.wide <- greenhouse.sum.clean %>%
-  pivot_wider(names_from = species.code, values_from = species.count, 
+  pivot_wider(names_from = species, values_from = count.max, 
               names_sort = TRUE, values_fill = 0)
 
-view(field.wide)
+view(greenhouse.wide)
 
 ##Permanova 
 
 # species matrix only
-sp.matrix <- field.wide %>% select(abicon:vioadu)
+gh.sp.matrix <- greenhouse.wide %>% select(Bunny ears boo:White based soft )
 
 perma.1 <- adonis2(sp.matrix ~ habitat + meadow, 
                    data = field.wide, method ="jaccard")
