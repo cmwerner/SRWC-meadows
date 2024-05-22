@@ -26,7 +26,7 @@ csv file for SRWC seedbank greenhouse study
 
 ##greenhouse.n <- SRWC_seedbank_greenhouse_2024_02_21_n
   
-greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-02-21_n.csv"), header = TRUE)
+greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"), header = TRUE)
 
 greenhouse.n$X <- NULL
 

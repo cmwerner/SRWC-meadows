@@ -3,13 +3,14 @@ library(tidyverse)
 library(here)
 
 field.data <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"), header = TRUE)
+gh.data <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-02-21_n.csv"), header = TRUE)
 
 # removing duplicate rows
 dup.1 <- which(field.data$plot == "rf.6.a" & field.data$species.code == "unkfb")[2]
 dup.2 <- which(field.data$plot == "rf.4.p" & field.data$species.code == "sidore")[2]
 drop <- c(dup.1, dup.2)
 
-field.data.raw <- field.data %>% filter(!row_number() %in% drop)
+field.data <- field.data.raw %>% filter(!row_number() %in% drop)
 
 # switching to wide format for vegan
 field.wide <- field.data %>%
