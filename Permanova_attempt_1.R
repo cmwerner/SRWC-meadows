@@ -9,7 +9,7 @@ dup.1 <- which(field.data.raw$plot == "rf.6.a" & field.data.raw$species.code == 
 dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == "sidore")[2]
 drop <- c(dup.1, dup.2)
 
-field.data <- field.data.raw %>% filter(!row_number() %in% drop)
+field.data.raw <- field.data %>% filter(!row_number() %in% drop)
 
 # switching to wide format for vegan
 field.wide <- field.data %>%
