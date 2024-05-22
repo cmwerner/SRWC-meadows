@@ -2,11 +2,11 @@ library(vegan)
 library(tidyverse)
 library(here)
 
-field.data <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"), header = TRUE)
+field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"), header = TRUE)
 
 # removing duplicate rows
-dup.1 <- which(field.data$plot == "rf.6.a" & field.data$species.code == "unkfb")[2]
-dup.2 <- which(field.data$plot == "rf.4.p" & field.data$species.code == "sidore")[2]
+dup.1 <- which(field.data.raw$plot == "rf.6.a" & field.data.raw$species.code == "unkfb")[2]
+dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == "sidore")[2]
 drop <- c(dup.1, dup.2)
 
 field.data <- field.data.raw %>% filter(!row_number() %in% drop)
