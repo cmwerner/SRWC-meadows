@@ -30,6 +30,8 @@ greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"),
 
 greenhouse.n$X <- NULL
 
+greenhouse.n$species <- greenhouse.n$species %>% trimws()
+
 
 ```
 
