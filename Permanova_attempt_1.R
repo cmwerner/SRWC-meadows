@@ -50,7 +50,7 @@ ggplot(nmdsPlot, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
   xlab('NMDS 1') +
   ylab('NMDS 2')
 
-ggsave(plot = nmdsPlot , filename = "figures/NMDS_species_field.data.png", width = 6, height = 4, units = "in")
+ggsave(filename = "figures/NMDS_species_field-data.png", width = 6, height = 4, units = "in")
 
 ## Greenhouse data ---------------
 view(greenhouse.sum.clean)
@@ -59,6 +59,7 @@ view(greenhouse.sum.clean)
 
 # switching to wide format for vegan
 greenhouse.wide <- greenhouse.sum.clean %>%
+  mutate(species = gsub("\\s+", "", species)) %>%
   pivot_wider(names_from = species, values_from = count.max, 
               names_sort = TRUE, values_fill = 0)
 
@@ -67,15 +68,28 @@ view(greenhouse.wide)
 ##Permanova 
 
 # species matrix only
-gh.sp.matrix <- greenhouse.wide %>% select(Bunny ears boo:White based soft )
+gh.sp.matrix <- greenhouse.wide %>% select(Bunny ears boo:White based flat soft grass )
 
-perma.1 <- adonis2(sp.matrix ~ habitat + meadow, 
-                   data = field.wide, method ="jaccard")
+perma.2 <- adonis2(gh.sp.matrix ~ habitat + meadow, 
+                   data = field.wide, method ="bray")
 
-perma.1
+perma.2
 
+## Code for plotting NMDS
 
+bray.dist <- vegdist(sp.matrix, method="bray")
+nmds <- metaMDS(bray.dist, k=2, tol=0.001, maxit=100) # figures out where the points should go
 
+nmdsPlot2 <- tibble(x=nmds$points[,1], y=nmds$points[,2])
+nmdsPlot2[,c('meadow','habitat','transect','plot')] <- 
+  field.wide[,c('meadow','habitat','transect','plot')]
 
+ggplot(nmdsPlot2, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
+  geom_point(size=2) + 
+  scale_color_manual(values = fun.palatte) +
+  theme_classic() +
+  xlab('NMDS 1') +
+  ylab('NMDS 2')
 
-greenhouse.sum.clean
+ggsave(filename = "figures/NMDS_species_greenhouse-data.png", width = 6, height = 4, units = "in")
+

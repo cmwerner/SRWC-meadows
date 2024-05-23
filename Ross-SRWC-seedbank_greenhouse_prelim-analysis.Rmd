@@ -20,7 +20,7 @@ fun.palatte <- c("darkolivegreen","darkgoldenrod")
 
 ## Read in Data
 
-csv file for SRWC seedbank greenhouse study
+#csv file for SRWC seedbank greenhouse study
 
 ```{r read-files}
 
