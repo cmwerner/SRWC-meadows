@@ -8,6 +8,11 @@ field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"
 ## Color 
 fun.palatte <- c("darkolivegreen","darkgoldenrod")
 
+## Legend veriables 
+meadow_labels <- c("cm" = "Cabin Medows", "rf" = "Rock Fence")
+habitat_labels <- c("a" = "Actual", "p" = "Potential")
+
+
 # removing duplicate rows
 dup.1 <- which(field.data.raw$plot == "rf.6.a" & field.data.raw$species.code == "unkfb")[2]
 dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == "sidore")[2]
@@ -44,11 +49,15 @@ nmdsPlot[,c('meadow','habitat','transect','plot')] <-
   field.wide[,c('meadow','habitat','transect','plot')]
 
 ggplot(nmdsPlot, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
-  geom_point(size=2) + 
-  scale_color_manual(values = fun.palatte) +
+  geom_point(size=3) + 
+  scale_color_manual(values = fun.palatte, labels = habitat_labels) +
+  scale_shape_manual(values = c(16, 17), labels = meadow_labels) +
   theme_classic() +
   xlab('NMDS 1') +
-  ylab('NMDS 2')
+  ylab('NMDS 2') +
+  labs(color = 'Habitat', shape = 'Meadow') +
+  guides(color = guide_legend(title = "Habitat Type"),
+         shape = guide_legend(title = "Meadow"))
 
 ggsave(filename = "figures/NMDS_species_field-data.png", width = 6, height = 4, units = "in")
 
@@ -87,10 +96,15 @@ nmdsPlot2[,c('meadow','habitat','transect','plot')] <-
   greenhouse.wide[,c('meadow','habitat','transect','plot')]
 
 ggplot(nmdsPlot2, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
-  geom_point(size=2) + 
-  scale_color_manual(values = fun.palatte) +
+  geom_point(size=3) + 
+  scale_color_manual(values = fun.palatte, labels = habitat_labels) +
+  scale_shape_manual(values = c(16, 17), labels = meadow_labels) +
   theme_classic() +
   xlab('NMDS 1') +
-  ylab('NMDS 2')
+  ylab('NMDS 2') +
+  labs(color = 'Habitat', shape = 'Meadow') +
+  guides(color = guide_legend(title = "Habitat Type"),
+         shape = guide_legend(title = "Meadow"))
+
 
 ggsave(filename = "figures/NMDS_species_greenhouse-data.png", width = 6, height = 4, units = "in")
