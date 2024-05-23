@@ -30,6 +30,9 @@ greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"),
 
 greenhouse.n$X <- NULL
 
+greenhouse.n$species <- greenhouse.n$species %>% 
+  trimws() %>% tolower() %>%
+  str_replace_all(" ", ".")
 
 ```
 
@@ -60,6 +63,8 @@ summarize across dates for max species richness
 greenhouse.long <- greenhouse.n %>% 
   pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count")
 
+
+
 # summary by species max count
 greenhouse.sum <- greenhouse.long %>% 
   group_by(species, plot) %>% 
@@ -67,7 +72,7 @@ greenhouse.sum <- greenhouse.long %>%
     count.max = max(count, na.rm = TRUE)) %>%
   filter(count.max > 0)
 
-#View(greenhouse.sum)
+View(greenhouse.sum)
 
 # remove species present in control trays
 control.species <- greenhouse.sum %>% 

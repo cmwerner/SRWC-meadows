@@ -27,10 +27,10 @@ view(field.wide)
 # species matrix only
 sp.matrix <- field.wide %>% select(abicon:vioadu)
 
-perma.1 <- adonis2(sp.matrix ~ habitat + meadow, 
+perma.field <- adonis2(sp.matrix ~ habitat + meadow, 
                     data = field.wide, method ="jaccard")
 
-perma.1
+perma.field
 
 
 
@@ -57,8 +57,11 @@ view(greenhouse.sum.clean)
 
 # using greenhouse.sum.clean data from Rmd file
 
+plot.info <- field.wide %>% select(meadow, habitat, transect, plot)
+
 # switching to wide format for vegan
 greenhouse.wide <- greenhouse.sum.clean %>%
+  left_join(plot.info, by = "plot") %>%
   pivot_wider(names_from = species, values_from = count.max, 
               names_sort = TRUE, values_fill = 0)
 
@@ -67,15 +70,9 @@ view(greenhouse.wide)
 ##Permanova 
 
 # species matrix only
-gh.sp.matrix <- greenhouse.wide %>% select(Bunny ears boo:White based soft )
+gh.sp.matrix <- greenhouse.wide %>% select(bunny.ears.boo:white.based.flat.soft.grass)
 
-perma.1 <- adonis2(sp.matrix ~ habitat + meadow, 
-                   data = field.wide, method ="jaccard")
+perma.gh <- adonis2(gh.sp.matrix ~ habitat + meadow, 
+                   data = greenhouse.wide, method ="bray")
 
-perma.1
-
-
-
-
-
-greenhouse.sum.clean
+perma.gh
