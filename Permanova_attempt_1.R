@@ -8,6 +8,11 @@ field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2023-07-21b.csv
 ## Color 
 fun.palatte <- c("darkolivegreen","darkgoldenrod")
 
+## Legend veriables 
+meadow_labels <- c("cm" = "Cabin Medows", "rf" = "Rock Fence")
+habitat_labels <- c("a" = "Actual", "p" = "Potential")
+
+
 # removing duplicate rows
 dup.1 <- which(field.data.raw$plot == "rf.6.a" & field.data.raw$species.code == "unkfb")[2]
 dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == "sidore")[2]
@@ -49,13 +54,17 @@ nmdsPlot[,c('meadow','habitat','transect','plot')] <-
   field.wide[,c('meadow','habitat','transect','plot')]
 
 ggplot(nmdsPlot, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
-  geom_point(size=2) + 
-  scale_color_manual(values = fun.palatte) +
+  geom_point(size=3) + 
+  scale_color_manual(values = fun.palatte, labels = habitat_labels) +
+  scale_shape_manual(values = c(16, 17), labels = meadow_labels) +
   theme_classic() +
   xlab('NMDS 1') +
-  ylab('NMDS 2')
+  ylab('NMDS 2') +
+  labs(color = 'Habitat', shape = 'Meadow') +
+  guides(color = guide_legend(title = "Habitat Type"),
+         shape = guide_legend(title = "Meadow"))
 
-ggsave(plot = nmdsPlot , filename = "figures/NMDS_species_field.data.png", width = 6, height = 4, units = "in")
+ggsave(filename = "figures/NMDS_species_field-data.png", width = 6, height = 4, units = "in")
 
 ## Greenhouse data ---------------
 view(greenhouse.sum.clean)
@@ -68,7 +77,7 @@ plot.info <- field.wide %>% select(meadow, habitat, transect, plot)
 greenhouse.wide <- greenhouse.sum.clean %>%
   left_join(plot.info, by = "plot") %>%
   pivot_wider(names_from = species, values_from = count.max, 
-              names_sort = TRUE, values_fill = 0)
+            names_sort = TRUE, values_fill = 0)
 
 view(greenhouse.wide)
 
@@ -78,6 +87,29 @@ view(greenhouse.wide)
 gh.sp.matrix <- greenhouse.wide %>% select(bunny.ears.boo:white.based.flat.soft.grass)
 
 perma.gh <- adonis2(gh.sp.matrix ~ habitat + meadow, 
-                   data = greenhouse.wide, method ="bray")
+                    data = greenhouse.wide, method ="bray")
 
 perma.gh
+
+## Code for plotting NMDS
+
+bray.dist <- vegdist(sp.matrix, method="bray")
+nmds <- metaMDS(bray.dist, k=2, tol=0.001, maxit=100) # figures out where the points should go
+
+nmdsPlot2 <- tibble(x=nmds$points[,1], y=nmds$points[,2])
+nmdsPlot2[,c('meadow','habitat','transect','plot')] <- 
+  greenhouse.wide[,c('meadow','habitat','transect','plot')]
+
+ggplot(nmdsPlot2, aes(x, y, shape=factor(meadow), color=factor(habitat))) +
+  geom_point(size=3) + 
+  scale_color_manual(values = fun.palatte, labels = habitat_labels) +
+  scale_shape_manual(values = c(16, 17), labels = meadow_labels) +
+  theme_classic() +
+  xlab('NMDS 1') +
+  ylab('NMDS 2') +
+  labs(color = 'Habitat', shape = 'Meadow') +
+  guides(color = guide_legend(title = "Habitat Type"),
+         shape = guide_legend(title = "Meadow"))
+
+
+ggsave(filename = "figures/NMDS_species_greenhouse-data.png", width = 6, height = 4, units = "in")
