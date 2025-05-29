@@ -20,92 +20,118 @@ fun.palatte <- c("darkolivegreen","darkgoldenrod")
 
 ## Read in Data
 
-csv file for SRWC seedbank greenhouse study
+Two csv files for greenhouse study data, one from 2023 start sampling and one from 2024 start sampling. Each of these files has a corresponding plant ID file and they do still need to be cleaned up and converted to species codes
 
 ```{r read-files}
 
-##greenhouse.n <- SRWC_seedbank_greenhouse_2024_02_21_n
-  
-greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"), header = TRUE)
+# year 1 greenhouse data
+greenhouse.n <- read.csv(here("data/SRWC-seedbank_greenhouse_2024-05-22_n.csv"), 
+                         header = TRUE)
 
 greenhouse.n$X <- NULL
+greenhouse.n$habitat.type <- NULL
 
 greenhouse.n$species <- greenhouse.n$species %>% 
   trimws() %>% tolower() %>%
   str_replace_all(" ", ".")
 
+# switch to long format (year 1 data)
+greenhouse.long <- greenhouse.n %>% 
+  pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count",
+               values_drop_na = TRUE) %>%
+  mutate(sample.year = 2023)
+
+
+
+# year 2 greenhouse data
+greenhouse.2 <- read.csv(here("data/SRWC-seedbank_greenhouse_year-2_2025-05-27.csv"), 
+                         header = TRUE) %>%
+  rename_with(tolower)
+
+greenhouse.2.long <- greenhouse.2 %>%
+  mutate(across(rf.1.a:control, as.integer),
+         species = case_when(species.code > 0 ~ species.code, 
+                             .default = species.morpho)) %>%
+  pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count",
+               values_drop_na = TRUE) %>%
+  mutate(sample.year = 2024)
+
+greenhouse.2.long$species <- greenhouse.2.long$species %>% 
+  trimws() %>% tolower() %>%
+  str_replace_all(" ", ".") 
+
+# join year 1 and year 2 greenhouse data (long format)
+# some data cleaning as needed for names with errors
+greenhouse <- full_join(greenhouse.2.long, greenhouse.long, 
+                        by = c("sample.year", "plot", "species", "count",
+                               "date", "observer")) %>%
+  mutate(  
+    species = case_when(
+      species == "branching.long.leaf" ~ "sticky.grass",
+      species == "probably.viola" ~ "vioadu",
+      species == "unidentified.sedge?" ~ "junsp?",
+      .default = species
+    )
+  )
+
 ```
 
 
 
-## Summarize for species richness
+## Summarize for max species abundance
 
-summarize by date
+summarize across dates for max abundance of each species in each plot
 ```{r summarize-date}
-
-# switch to long format (same data)
-greenhouse.long <- greenhouse.n %>% 
-  pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count")
-
-# summary by date
-greenhouse.summary <- greenhouse.long %>% 
-  group_by(date, observer, plot) %>% 
-  dplyr::summarise(
-    Richness = sum(count>0, na.rm = TRUE))
-
-View(greenhouse.summary)
-
-```
-summarize across dates for max species richness
-```{r summarize-date}
-
-# switch to long format (same data)
-greenhouse.long <- greenhouse.n %>% 
-  pivot_longer(cols = rf.1.a:control, names_to = "plot", values_to = "count")
-
-
 
 # summary by species max count
-greenhouse.sum <- greenhouse.long %>% 
-  group_by(species, plot) %>% 
+greenhouse.sum <- greenhouse %>% 
+  group_by(species, plot, sample.year) %>% 
   dplyr::summarise(
     count.max = max(count, na.rm = TRUE)) %>%
   filter(count.max > 0)
+  
 
-View(greenhouse.sum)
+# View(greenhouse.sum)
 
 # remove species present in control trays
 control.species <- greenhouse.sum %>% 
+  ungroup() %>%
   filter(plot == "control") %>% 
-  select(species) %>% 
-  unlist()
+  add_row(species = "jagged.fred") %>%
+  pull(species) 
 
 greenhouse.sum.clean <- greenhouse.sum %>%
-  filter(!(species %in% control.species))
+  filter(!(species %in% control.species), !(species == "butterfly.guy")) %>%
+  rename(greenhouse.count.max = "count.max") %>%
+  separate_wider_delim(plot, delim = ".", names = c("meadow", "plot.id", "habitat"),
+                       cols_remove = FALSE) %>%
+  arrange(meadow, habitat, plot.id, species)
 
+write.csv(greenhouse.sum.clean, "SWRC-seedbank_greenhouse_summary.csv")
+```
 
-# summarize by plots for richness
-greenhouse.max.summary <- greenhouse.sum.clean %>%
-  group_by(plot) %>%
-  dplyr::summarise(
-    greenhouse.richness = sum(count.max > 0, na.rm = TRUE)
+# Data Cleaning
+TO DO: Updating morpho names for species names where they were recently keyed, adding in observations of ones that were put into bigger pots but not recorded on the weekly sheets, and sorting out an error where three different species were initially conflated when young
+
+```{r greenhouse-data-cleaning}
+greenhouse.edit <- greenhouse.sum.clean %>%
+  mutate(
+    species = case_when(
+      
+      
+      .default = species
+    )
   )
 
-greenhouse.max.summary
 
 
 ```
 
+
+
 # Field data
-Read it in, organize and summarize it in the same way to match the greenhouse.max.summary dataset
-
-
-
-# Combine field and greenhouse data
-Use the function left_join(dataframe1, dataframe2, by = "plot")
+Read it in, organize and summarize it in the same way to match the greenhouse.max.summary dataset. Combine field and greenhouse data
 ```{r read-data-2}
-
-##field.data <- SRWC_seedbank_plant_survey_2024_02_26
 
 field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2023-07-21b.csv"), header = TRUE)
 
@@ -114,14 +140,60 @@ dup.1 <- which(field.data.raw$plot == "rf.6.a" & field.data.raw$species.code == 
 dup.2 <- which(field.data.raw$plot == "rf.4.p" & field.data.raw$species.code == "sidore")[2]
 drop <- c(dup.1, dup.2)
 
-field.data <- field.data.raw %>% filter(!row_number() %in% drop)
+field.data <- field.data.raw %>% 
+  filter(!row_number() %in% drop) %>%
+  rename(field.present.2023 = "species.count")
 
 
 ```
 
-Summarize field data 
+# Combine field and greenhouse data
+Right now just using 2023 field data, also have 2024 data with additional species and frequency estimates
+```{r combine-field-greenhouse}
+meadows.data <- field.data %>% 
+  full_join(greenhouse.sum.clean, 
+            by = c("plot","meadow", "habitat", "species.code"="species")) 
+
+meadows.species.sum <- meadows.data %>%
+  group_by(meadow, habitat, species.code) %>%
+  summarise(
+    plots.present.field = sum(field.present.2023 > 0, na.rm = TRUE),
+    plots.present.greenhouse = sum(greenhouse.count.max > 0, na.rm = TRUE)
+  ) 
+
+meadows.species.wide <- meadows.species.sum %>%
+  pivot_wider(
+    names_from = c(meadow, habitat),
+    values_from = c(plots.present.field, plots.present.greenhouse),
+    names_vary = "slowest"
+  ) %>%
+  mutate(
+    across(everything(), ~replace_na(.x,0))
+  ) %>%
+  sort(species.code)
+
+write.csv(meadows.species.wide, "SRWC-seedbank_species-frequency.csv")
+
+
+```
+
+
+
+
+
+# Old analyses from SOU 2023 Capstone -----------------------
+
+# Summarize greenhouse and field data for richness
 
 ```{r summarize-data-2}
+
+greenhouse.max.summary <- greenhouse.sum.clean %>%
+  group_by(plot) %>%
+  dplyr::summarise(
+    greenhouse.richness = sum(count.max > 0, na.rm = TRUE)
+  )
+
+greenhouse.max.summary
 
 
 field.summary <- field.data %>%

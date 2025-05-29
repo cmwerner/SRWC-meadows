@@ -3,7 +3,7 @@ library(tidyverse)
 library(here)
 
 ### Field data --------------
-field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2024-02-26.csv"), header = TRUE)
+field.data.raw <- read.csv(here("data/SRWC-seedbank_plant-survey_2023-07-21b.csv"), header = TRUE)
 
 ## Color 
 fun.palatte <- c("darkolivegreen","darkgoldenrod")
@@ -17,8 +17,8 @@ field.data <- field.data.raw %>% filter(!row_number() %in% drop)
 
 # switching to wide format for vegan
 field.wide <- field.data %>%
-pivot_wider(names_from = species.code, values_from = species.count, 
-            names_sort = TRUE, values_fill = 0)
+  pivot_wider(names_from = species.code, values_from = species.count, 
+              names_sort = TRUE, values_fill = 0)
 
 view(field.wide)
 
@@ -27,6 +27,7 @@ view(field.wide)
 # species matrix only
 sp.matrix <- field.wide %>% select(abicon:vioadu)
 
+# can also add transect
 perma.field <- adonis2(sp.matrix ~ habitat + meadow, 
                     data = field.wide, method ="jaccard")
 
@@ -39,6 +40,10 @@ perma.field
 jaccard.dist <- vegdist(sp.matrix, method="jaccard")
 nmds <- metaMDS(jaccard.dist, k=2, tol=0.001, maxit=100) # figures out where the points should go
 
+# basic plotting option
+plot(nmds)
+
+## ggplot option
 nmdsPlot <- tibble(x=nmds$points[,1], y=nmds$points[,2])
 nmdsPlot[,c('meadow','habitat','transect','plot')] <- 
   field.wide[,c('meadow','habitat','transect','plot')]
