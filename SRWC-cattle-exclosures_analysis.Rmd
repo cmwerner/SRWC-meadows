@@ -52,8 +52,15 @@ cattle.control <- cattle.ex %>%
   ) %>%
   ungroup()
 
-# compare to pre-treatment data
-# cattle_change
+# Compare to first year data, September visit only for now
+cattle.change <- cattle.ex %>% 
+  filter(month(date) == 9) %>%
+  group_by(plot) %>%
+  mutate(
+    first.date = min(date),
+    dc.start = darlingtonia[date == first.date][1],
+    dc.change = darlingtonia - dc.start
+  )
 
   
 ```
@@ -107,7 +114,7 @@ cattle.control %>%
   geom_point(position = position_dodge(width = 30)) +
   theme_bw() 
 
-# Dc cover raw data change through time
+# Dc cover raw data through time
 cattle.control %>% 
   filter(month(date) == 9) %>%
   ggplot(aes(x = date, y = darlingtonia, 
@@ -116,6 +123,14 @@ cattle.control %>%
   geom_line(position = position_dodge(width = 30)) +
   theme_bw() 
 
+# Dc cover change through time
+cattle.change %>%
+  filter(meadow.type == "wet") %>%
+  ggplot(aes(x = date, y = dc.change, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+  geom_line(position = position_dodge(width = 30)) +
+  theme_bw() 
 
 # water cover compared to control
 cattle.control %>%
@@ -134,7 +149,7 @@ Starting with just looking at the final time point rather than a repeated measur
 # filter dataset to just final time point
 cattle.end <- cattle.control %>% filter(date > "2025-09-01")
 
-# trampling (treamtment impact within meadow type)
+# trampling (treatment impact within meadow type)
 m.trample <- lmer(animal.trample ~ treatment * meadow.type + (1|block), cattle.end)
 emm.trample <- emmeans(m.trample, specs = ~ treatment | meadow.type)
 emm.trample
@@ -145,6 +160,43 @@ m.trample <- lmer(animal.trample ~ treatment + meadow.type + (1|block), cattle.e
 emm.trample <- emmeans(m.trample, specs = ~ treatment)
 emm.trample
 contrast(emm.trample, method = "pairwise")
+
+
+# vegetation height (treatment impact within meadow type)
+m.height <- lmer(height.mean ~ treatment * meadow.type + (1|block), cattle.end)
+emm.height <- emmeans(m.height, specs = ~ treatment | meadow.type)
+emm.height
+contrast(emm.height, method = "pairwise")
+
+# vegetation cover (treatment impact within meadow type)
+# something odd in dry meadow results?
+m.veg <- lmer(veg.cover ~ treatment * meadow.type + (1|block), cattle.end)
+emm.veg <- emmeans(m.veg, specs = ~ treatment | meadow.type)
+emm.veg
+contrast(emm.veg, method = "pairwise")
+
+# vegetation cover 
+m.veg <- lmer(veg.cover ~ treatment + meadow.type + (1|block), cattle.end)
+emm.veg <- emmeans(m.veg, specs = ~ treatment)
+emm.veg
+contrast(emm.veg, method = "pairwise")
+
+# Darlingtonia (wet meadows only)
+cattle.end.wet <- cattle.end %>% filter(meadow.type == "wet")
+m.dc <- lmer(darlingtonia ~ treatment + (1|block), cattle.end.wet)
+emm.dc <- emmeans(m.dc, specs = ~ treatment)
+emm.dc
+contrast(emm.dc, method = "pairwise")
+
+
+# Darlingtonia change
+cattle.change.end <- cattle.change %>%
+  filter(meadow.type == "wet", date > "2025-09-01")
+
+m.dc.change <- lmer(dc.change ~ treatment + (1|block), cattle.change.end)
+emm.dc.change <- emmeans(m.dc.change, specs = ~ treatment)
+emm.dc.change
+contrast(emm.dc.change, method = "pairwise")
 
 ```
 
