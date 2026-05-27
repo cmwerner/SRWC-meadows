@@ -1,0 +1,204 @@
+---
+title: "SRWC-cattle-exclosures_analysis"
+output: html_document
+date: "2026-05-22"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(lme4)
+library(emmeans)
+
+# list of wet meadow vs dry meadow blocks
+wet.blocks <- c(2, 3, 5, 6, 8)
+
+cattle.ex <- read.csv("data/SRWC-cattle-exclosure_post-treatment_2025-09-14.csv") %>%
+  rename_with(tolower) %>%
+  rename(manure.count = x..cowpies, 
+         grazed.perc = x..grazed, 
+         height.1 = height.1..cm.) %>%
+  separate_wider_delim(plot, " ", names = c("position", "treatment")) %>%
+  mutate(date = as.Date(date, "%m/%d/%y"),
+         plot = paste0(block, position),
+         height.mean = (height.1 + height.2 + height.3 + height.4)/4,
+         meadow.type = case_when(block %in% wet.blocks ~ "wet", 
+                                 TRUE ~ "dry"))
+
+
+
+# compare versus control in each plot at each time step for height, veg.cover, 
+# animal.trample, water, darlingtonia, grazed.perc
+cattle.control <- cattle.ex %>%
+  group_by(block, date) %>%
+  mutate(
+    height.control = height.mean[treatment == "control"][1],
+    height.diff = height.mean - height.control,
+    
+    veg.control = veg.cover[treatment == "control"][1],
+    veg.diff = veg.cover - veg.control,
+    
+    trample.control = animal.trample[treatment == "control"][1],
+    trample.diff = animal.trample - trample.control,
+    
+    water.control = water[treatment == "control"][1],
+    water.diff = water - water.control,
+    
+    dc.control = darlingtonia[treatment == "control"][1],
+    dc.diff = darlingtonia - dc.control,
+    
+    grazed.control = grazed.perc[treatment == "control"][1],
+    grazed.diff = grazed.perc - grazed.control
+  ) %>%
+  ungroup()
+
+# compare to pre-treatment data
+# cattle_change
+
+  
+```
+
+## Scattershot visualizations
+Currently for each block, comparing to the control using just a difference -- could also think about a proportion response or a log response ratio
+
+Or we can try to compare first year's data to third year's data and look at what changed, but it's also interesting to see the difference in ex trampling effects. Also need to think about how we're managing the two time points of data each year
+
+
+```{r visualizations-control}
+
+
+# trampling impact compared to control
+cattle.control %>% 
+  ggplot(aes(x = date, y = trample.diff, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+#  geom_line(position = position_dodge(width = 50)) +
+  theme_bw() 
+
+
+# grazed percent compared to control
+cattle.control %>%
+  ggplot(aes(x = date, y = grazed.diff, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+
+# veg height compared to control
+cattle.control %>%
+  ggplot(aes(x = date, y = height.diff, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+
+# veg cover compared to control
+cattle.control %>% 
+  ggplot(aes(x = date, y = veg.diff, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw()
+
+
+# Dc cover compared to control
+cattle.control %>%
+  ggplot(aes(x = date, y = dc.diff, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+# Dc cover raw data change through time
+cattle.control %>% 
+  filter(month(date) == 9) %>%
+  ggplot(aes(x = date, y = darlingtonia, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+  geom_line(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+
+# water cover compared to control
+cattle.control %>%
+  ggplot(aes(x = date, y = water.diff, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+
+```
+
+# Preliminary analyses
+Starting with just looking at the final time point rather than a repeated measures structure
+```{r}
+
+# filter dataset to just final time point
+cattle.end <- cattle.control %>% filter(date > "2025-09-01")
+
+# trampling (treamtment impact within meadow type)
+m.trample <- lmer(animal.trample ~ treatment * meadow.type + (1|block), cattle.end)
+emm.trample <- emmeans(m.trample, specs = ~ treatment | meadow.type)
+emm.trample
+contrast(emm.trample, method = "pairwise")
+
+# trampling (averaged across meadow type)
+m.trample <- lmer(animal.trample ~ treatment + meadow.type + (1|block), cattle.end)
+emm.trample <- emmeans(m.trample, specs = ~ treatment)
+emm.trample
+contrast(emm.trample, method = "pairwise")
+
+```
+
+
+
+## Unused
+Raw data visualizations
+```{r visualizations-raw}
+
+# trampling impact raw data
+cattle.control %>% 
+ # filter(month(date) == 9) %>%
+  ggplot(aes(x = date, y = animal.trample, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+#  geom_line(position = position_dodge(width = 50)) +
+  theme_bw() 
+
+# grazed percent raw data
+cattle.control %>% 
+  ggplot(aes(x = date, y = grazed.perc, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+# veg height raw data
+cattle.control %>% 
+  ggplot(aes(x = date, y = height.mean, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+# veg cover raw data
+cattle.control %>% 
+  ggplot(aes(x = date, y = veg.cover, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw()
+
+# Dc cover raw data
+cattle.control %>% 
+  filter(month(date) == 9) %>%
+  ggplot(aes(x = date, y = darlingtonia, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_dodge(width = 30)) +
+  geom_line(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+# water cover raw data
+cattle.control %>% 
+  ggplot(aes(x = date, y = water, 
+             color = treatment, shape = meadow.type)) +
+  geom_point(position = position_dodge(width = 30)) +
+  theme_bw() 
+
+```
+
