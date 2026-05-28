@@ -8,6 +8,7 @@ date: "2026-05-22"
 library(tidyverse)
 library(lubridate)
 library(lme4)
+library(glmmTMB)
 library(emmeans)
 
 # list of wet meadow vs dry meadow blocks
@@ -200,6 +201,26 @@ contrast(emm.dc.change, method = "pairwise")
 
 ```
 
+# Analyses through time
+Also switching to a beta distribution for the models, which is probably a good idea even for the single time-point for the cover-based metrics
+```{r time-series}
+cattle.control <- cattle.control %>%
+  mutate(
+    trample.2 = case_when(
+      animal.trample == 0 ~ 0.001,
+      animal.trample == 100 ~ 0.999,
+      TRUE ~ animal.trample/100)
+  )
+
+# trampling 
+m.time.trample <- glmmTMB(trample.2 ~ treatment + (1|date) + (1|block/plot),
+                  data = cattle.control,
+                  family = beta_family(link = "logit"))
+emm.time.trample <- emmeans(m.time.trample, specs = ~ treatment)
+emm.time.trample
+contrast(emm.time.trample, method = "pairwise")
+
+```
 
 
 ## Unused
