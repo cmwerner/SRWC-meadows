@@ -12,6 +12,7 @@ library(lubridate)
 
 ## Reading in Data
 
+To Do: decide how to consider streams beyond search distance from plot -- arbitrary large distance or use GIS to get spatial analysis distance
 
 ```{r cars}
 Cattle_Impact_Full <- read.csv("Cleaned_Capstone_Data.csv") %>% # reading in csv
@@ -46,8 +47,18 @@ Cattle_Impact <- Cattle_Impact_Full  %>%
     
     Hoof_Punch_Present = case_when(
       Percent_Hoof_Punch > 0 ~ "yes",
-      TRUE ~ "no")
+      TRUE ~ "no"),
+    
+    # If stream distance wasn't recorded it was > 50m, so putting that in as our minimum for now
+    Closest_Water_Distance_2 = case_when(
+      is.na(Closest_Water_Distance) ~ 50, 
+      TRUE ~ Closest_Water_Distance
     )
+  )
+
+
+Cattle_Early <- Cattle_Impact %>%
+  filter(Date < "2025-09-01")
 
 ```
 
@@ -150,6 +161,66 @@ Cattle_Impact %>%
   ggplot(aes(x = Percent_DC, y = Percent_Hoof_Punch)) +
   geom_point(position = position_jitter()) +
   geom_smooth(method = "lm")
+
+
+```
+
+
+Distance to stream
+Type of water/stream width?
+
+```{r dist-water}
+
+
+Cattle_Early %>%
+  ggplot(aes(x = Closest_Water_Distance_2, y = Percent_Hoof_Punch)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+Cattle_Early %>%
+  ggplot(aes(x = Percent_Water, y = Percent_Hoof_Punch)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+
+m.hoof.punch <- lm(Percent_Hoof_Punch ~ Closest_Water_Distance_2 + Restoration_Location_2,
+                    data = Cattle_Early)
+summary(m.hoof.punch)
+
+m.hoof.punch.2 <- lm(Percent_Hoof_Punch ~ Closest_Water_Distance_2 + Percent_Water + 
+                       Restoration_Location_2,
+                    data = Cattle_Early)
+summary(m.hoof.punch.2)
+
+
+m.hoof.punch.3 <- lm(Percent_Hoof_Punch ~ Percent_Water + Percent_DC,
+                    data = Cattle_Early)
+summary(m.hoof.punch.3)
+
+m.hoof.punch.3 <- lm(Percent_Hoof_Punch ~ Percent_DC + Percent_Water,
+                    data = Cattle_Early)
+summary(m.hoof.punch.3)
+
+# Is the DC and percent water info overlapping?
+# Correlated but actually not incredibly tight
+Cattle_Early %>%
+  ggplot(aes(x = Percent_Water, y = Percent_DC)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+# stream distance and restoration location
+Cattle_Early %>%
+  ggplot(aes(x = Closest_Water_Distance_2, y = Percent_Hoof_Punch,
+             color = Restoration_Location_2)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
 
 
 ```
