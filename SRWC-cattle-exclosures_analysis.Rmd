@@ -209,7 +209,12 @@ cattle.control <- cattle.control %>%
     trample.2 = case_when(
       animal.trample == 0 ~ 0.001,
       animal.trample == 100 ~ 0.999,
-      TRUE ~ animal.trample/100)
+      TRUE ~ animal.trample/100),
+    darlingtonia.2 = case_when(
+      darlingtonia == 0 ~ 0.001,
+      darlingtonia == 100 ~ 0.999,
+      TRUE ~ darlingtonia/100
+    )
   )
 
 # trampling 
@@ -219,6 +224,14 @@ m.time.trample <- glmmTMB(trample.2 ~ treatment + (1|date) + (1|block/plot),
 emm.time.trample <- emmeans(m.time.trample, specs = ~ treatment)
 emm.time.trample
 contrast(emm.time.trample, method = "pairwise")
+
+# darlingtonia cover
+m.time.dc <- glmmTMB(darlingtonia.2 ~ treatment + (1|date) + (1|block/plot),
+                  data = filter(cattle.control, meadow.type == "wet"),
+                  family = beta_family(link = "logit"))
+emm.time.dc <- emmeans(m.time.dc, specs = ~ treatment)
+emm.time.dc
+contrast(emm.time.dc, method = "pairwise")
 
 ```
 

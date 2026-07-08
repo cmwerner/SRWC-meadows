@@ -7,7 +7,9 @@ date: "2026-04-20"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(glmmTMB)
 library(lubridate)
+library(ordinal)
 ```
 
 ## Reading in Data
@@ -23,17 +25,24 @@ cattle_impact_full <- read.csv("Cleaned_Capstone_Data.csv") %>% # reading in csv
     hgm = hydrogeomorphic_classification
   ) %>%
   mutate(  # Editing data in our columns for cleaning (use with caution!)
-    watershed = str_trim(watershed), # remove whitespace from Watershed column
+    watershed = str_trim(watershed), # remove whitespace
+    grazing_intensity = str_trim(grazing_intensity),  
+    # factoring grazing intensity
+    grazing_intensity = factor(case_when(grazing_intensity == "Light" ~ "Low", 
+                                         TRUE ~ grazing_intensity), 
+                               levels = c("None", "Low", "Moderate", "High")), 
     closest_water_distance = as.numeric(closest_water_distance), # formatting Closest_Water_Distance column as a number
-    date = as.Date(date, format = "%m/%d/%Y") # Reformats the Date column into a format which R can interpret as dates correctly
+    date = as.Date(date, format = "%m/%d/%Y"), # Reformats the Date column into a format which R can interpret as dates correctly
+    date = case_when(is.na(date) ~ as.Date("09/09/2025", format = "%m/%d/%Y"),
+                     TRUE ~ date) # fixing three dates that came in with the wrong format
   ) %>%
   filter(!is.na(plot)) # removing one blank row
 
 
 cattle_impact <- cattle_impact_full  %>%
-  select(date, plot, watershed, hgm, percent_canopy:manure_count, 
-         closest_water_distance, water_type, restoration_location,
-         stream_restoration_type:cattle_trail_crossing_or_bedding_area) %>%  # selecting relevant columns
+  #  select(date, plot, watershed, hgm, percent_canopy:manure_count, 
+  #         closest_water_distance, water_type, restoration_location,
+  #         stream_restoration_type:cattle_trail_crossing_or_bedding_area) %>%  # selecting relevant columns
   mutate(
     restoration_location_2 = case_when(
       restoration_location %in% c("Both", "Inside", "Downstream") ~ "in_or_downstream", 
@@ -52,90 +61,413 @@ cattle_impact <- cattle_impact_full  %>%
       percent_hoof_punch > 0 ~ "yes",
       TRUE ~ "no"),
     
+    dc_present = percent_dc > 0, # plots with or without Darlingtonia as a fen indicator
+    
+    # proportions instead of percents for beta distribution models
+    percent_hoof_punch_2 = 
+      case_when(
+        percent_hoof_punch == 0 ~ 0.001,
+        TRUE ~ percent_hoof_punch/100),
+    percent_trample_2 = 
+      case_when(
+        percent_trample == 0 ~ 0.001,
+        TRUE ~ percent_trample/100),
+    percent_dc_grazed_2 = case_when(
+      percent_dc_grazed == 0 ~ 0.001,
+      TRUE ~ percent_dc_grazed/100),
+    
     # If stream distance wasn't recorded it was > 50m, so putting that in as our minimum for now
     closest_water_distance_2 = case_when(
       is.na(closest_water_distance) ~ 50, 
       TRUE ~ closest_water_distance
-    )
-  )
-
-
-# early vist (all)
-cattle_early <- cattle_impact %>%
-  filter(date < "2025-09-01")
-
-# late visit (subset)
-cattle_late <- cattle_impact %>%
-  filter(date > "2025-09-01")
-
-# repeated plots both visits
-late_plots <- cattle_impact_full %>%
-  filter(date > "2025-09-01") %>%
-  pull(plot)
-
-cattle_impact_repeat <- cattle_impact %>%
-  filter(plot %in% late_plots) %>%
-  mutate(
+    ),
+    
+    # Binary version of grazing intensity
+    grazing_high = case_when(
+      grazing_intensity %in% c("None", "Low") ~ 0,
+      grazing_intensity %in% c("Moderate", "High") ~ 1,
+      TRUE ~ NA
+    ),
+    
+    # splitting stream impacts into separate columns
+    stream_impacts = tolower(stream_impacts),
+    stream_impacts = replace_na(stream_impacts, ""), # some sites with no stream impacts imported as na rather than blank or none
+    stream_incised = str_detect(stream_impacts, "inci"),
+    stream_sloughing = str_detect(stream_impacts, "slough"),
+    stream_grazing = str_detect(stream_impacts, "graz"),
+    stream_trample = str_detect(stream_impacts, "tramp"),
+    stream_hoof_punch = str_detect(stream_impacts, "hoof"),
+    stream_manure = str_detect(stream_impacts, "manur"),
+    stream_trail = str_detect(stream_impacts, "trail|cross"),
+    
+    
+    # adding early vs late visit timing information
     timing = case_when(
       date > "2025-09-01" ~ "Late",
       date <= "2025-09-01" ~ "Early",
       TRUE ~ "NA"
     )
-  ) %>%
-arrange(plot)
+  ) 
 
 
-```
+# early vist (all)
+cattle_early <- cattle_impact %>%
+  filter(timing == "Early")
 
-## Comparing early visit to late visit
+# late visit (subset)
+cattle_late <- cattle_impact %>%
+  filter(timing == "Late")
 
-*TODO: there's at least one row where the date is NA*
+# repeated plots both visits
+late_plots <- cattle_impact %>%
+  filter(timing == "Late") %>%
+  pull(plot)
 
-```{r repeat-timing, echo=FALSE}
-
-# comparing early to later
-
-# % DC
-cattle_impact_repeat %>%
-  ggplot(aes(x = timing, y = percent_dc, group = plot, color = hgm_2)) +
-  geom_line() +
-  theme_bw()
-
-# % Trample
-cattle_impact_repeat %>%
-  ggplot(aes(x = timing, y = percent_trample, group = plot, color = hgm_2)) +
-  geom_line() +
-  theme_bw()
-
-
-# % Hoof Punch
-cattle_impact_repeat %>%
-  ggplot(aes(x = timing, y = percent_hoof_punch, group = plot, color = hgm_2)) +
-  geom_line() +
-  theme_bw()
-
-
-# Manure Count
-cattle_impact_repeat %>%
-  ggplot(aes(x = timing, y = manure_count, group = plot, color = hgm_2)) +
-  geom_line() +
-  theme_bw()
-
+cattle_impact_repeat <- cattle_impact %>%
+  filter(plot %in% late_plots) %>%
+  arrange(plot)
 
 
 ```
 
 
-CW thoughts/notes of interest -- percent canopy or percent herb vs cattle impacts?
+# 1: Predictors of cattle impacts
+How to model grazing intensity? 
+
+```{r cattle-impacts}
+
+# hoof punch with beta distribution
+glm.hoof.punch <- glmmTMB(percent_hoof_punch_2 ~ closest_water_distance_2 + 
+                            percent_water + 
+                            percent_herb + 
+                            percent_canopy + 
+                            watershed +
+                            (1|hgm_2),
+                          data = cattle_early,
+                          family = beta_family(link = "logit"))
+summary(glm.hoof.punch)
+
+# trampling with beta distribution
+glm.trample <- glmmTMB(percent_trample_2 ~ closest_water_distance_2 + 
+                         percent_water + 
+                         percent_herb + 
+                         percent_canopy + 
+                         watershed +
+                         (1|hgm_2),
+                       data = cattle_early,
+                       family = beta_family(link = "logit"))
+summary(glm.trample)
 
 
-# DC and Hoof punch analyses
+# manure with poisson distribution
+glm.manure <- glmmTMB(manure_count ~ closest_water_distance_2 + 
+                        percent_water + 
+                        percent_herb + 
+                        percent_canopy +
+                        watershed +
+                        (1|hgm_2),
+                      data = cattle_early, 
+                      family = poisson(link = "log"))
+summary(glm.manure)
+
+
+# Ordinal grazing intensity data -- cumulative link models using the 'ordinal' package
+# Not sure how to interpret this one yet
+# could group to med-high and low-none if needed
+m.grazing <- clmm(grazing_intensity ~ closest_water_distance_2 + 
+                    percent_water + 
+                    percent_herb + 
+                    percent_canopy +
+                    (1|hgm_2),
+                  data = cattle_early) 
+summary(m.grazing)
+
+# none-low vs moderate-high grazing using a binomial model
+m.grazing.2 <- glmmTMB(grazing_high ~ closest_water_distance_2 + 
+                         percent_water + 
+                         percent_herb + 
+                         percent_canopy +
+                         watershed +
+                         (1|hgm_2),
+                       data = cattle_early, 
+                       family = binomial(link = "logit"))
+summary(m.grazing.2)
+
+
+```
+
+
+# 2: Connecting cattle impacts to Darlingtonia
+How do cattle impacts correlate with Darlingtonia presence (as a fen indicator)? Where are the biggest direct impacts on Darlingtonia (hoof punch and grazing of Darlingtonia)?
+```{r dc}
+
+# hoof punch is higher in sites with dc present (which are the wet sites)
+dc.hoof.punch <- glmmTMB(percent_hoof_punch_2 ~ dc_present + 
+                           percent_dc +
+                           (1|hgm_2),
+                         data = cattle_early,
+                         family = beta_family(link = "logit"))
+summary(dc.hoof.punch)
+
+
+# trample and manure don't differ by dc presence
+dc.trample <- glmmTMB(percent_trample_2 ~ dc_present + 
+                        percent_dc +
+                        (1|hgm_2),
+                      data = cattle_early,
+                      family = beta_family(link = "logit"))
+summary(dc.trample)
+
+dc.manure <- glmmTMB(manure_count ~ dc_present + 
+                       percent_dc +
+                       (1|hgm_2),
+                     data = cattle_early,
+                     family = poisson(link = "log"))
+summary(dc.manure)
+
+
+
+# not sure if this is useful -- overall grazing intensity
+dc.grazing <- clm(grazing_intensity ~ dc_present + 
+                       percent_dc ,
+                  data = cattle_early) 
+summary(dc.grazing)
+
+dc.present <- c(TRUE, FALSE)
+percent.dc <- c(10, 0)
+newdata <- tibble(dc_present = dc.present, percent_dc = percent.dc)
+
+predict(dc.grazing, newdata)
+
+
+
+# filter to sites where dc is present -- 35 sites
+# to look at where percent grazing of dc is highest
+# and hoof punch in dc sites is highest
+# no clear drivers of these patterns
+cattle_dc <- cattle_early %>% filter(dc_present == TRUE)
+
+m.dc.grazed <- glmmTMB(percent_dc_grazed_2 ~ 
+                         closest_water_distance_2 + 
+                         percent_dc +
+                         percent_water + 
+                         percent_herb + 
+                         percent_canopy +
+                         (1|hgm_2),
+                       data = cattle_dc)
+summary(m.dc.grazed)
+
+m.dc.hoofpunch <- glmmTMB(percent_hoof_punch ~ 
+                         closest_water_distance_2 + 
+                         percent_dc +
+                         percent_water + 
+                         percent_herb + 
+                         percent_canopy +
+                         (1|hgm_2),
+                       data = cattle_dc)
+summary(m.dc.hoofpunch)
+
+
+```
+
+
+
+
+# 3: Comparing cattle impacts in early and late seasons
+```{r timing}
+
+# hoof punch
+mtime.hoof.punch <- glmmTMB(percent_hoof_punch_2 ~ timing*closest_water_distance_2 + 
+                              timing*percent_water + 
+                              timing*percent_herb + 
+                              timing*percent_canopy + 
+                            (1|plot),
+                            data = cattle_impact_repeat,
+                            family = beta_family(link = "logit"))
+summary(mtime.hoof.punch)
+
+cattle_impact_repeat %>% 
+  ggplot(aes(x = percent_water, y = percent_hoof_punch_2, 
+             color = timing, fill = timing)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+# trampling
+mtime.trample <- glmmTMB(percent_trample_2 ~ timing*closest_water_distance_2 + 
+                              timing*percent_water + 
+                              timing*percent_herb + 
+                              timing*percent_canopy + 
+                            (1|plot),
+                            data = cattle_impact_repeat,
+                            family = beta_family(link = "logit"))
+summary(mtime.trample)
+
+
+# manure
+mtime.manure <- glmmTMB(manure_count ~ timing*closest_water_distance_2 + 
+                              timing*percent_water + 
+                              timing*percent_herb + 
+                              timing*percent_canopy + 
+                            (1|plot),
+                            data = cattle_impact_repeat,
+                            family = poisson(link = "log"))
+summary(mtime.manure)
+
+cattle_impact_repeat %>% 
+  ggplot(aes(x = closest_water_distance_2, y = manure_count, 
+             color = timing, fill = timing)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+# grazing intensity
+mtime.grazing <- glmmTMB(grazing_high ~ timing*closest_water_distance_2 + 
+                              timing*percent_water + 
+                              timing*percent_herb + 
+                              timing*percent_canopy + 
+                            (1|plot),
+                            data = cattle_impact_repeat,
+                      family = binomial(link = "logit"))
+summary(mtime.grazing)
+
+cattle_impact_repeat %>% 
+  ggplot(aes(x = closest_water_distance_2, y = grazing_high, 
+             color = timing, fill = timing)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+cattle_impact_repeat %>% 
+  ggplot(aes(x = percent_water, y = grazing_high, 
+             color = timing, fill = timing)) +
+  geom_point(alpha=0.3) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+
+```
+
+
+# 4: Cattle impacts on streams
+What can we do with stream impact data? Would like to look at how cattle impact on nearby streams is impacted by restoration structures
+
+Need to think about whether to include late survey data here too
+```{r streams}
+
+# filtering to plots where streams were present within 50m (stream impact data was recorded)
+cattle_streams <- cattle_impact %>% 
+  filter(!is.na(closest_water_distance)) %>%
+  select(plot, hgm, watershed, timing,
+         stream_impacts, 
+         stream_incised:stream_trail,
+         restoration_location, stream_restoration_type,
+         water_type_within_5m, water_type_within_10m)
+
+length(unique(cattle_streams$plot))  # 132 plots with stream data recorded in early, 136 total for both visits
+
+stream_summary <- cattle_streams %>% 
+  group_by(watershed, timing) %>%
+  summarise(
+    n = n(),
+    incised = sum(stream_incised),
+    sloughing = sum(stream_sloughing),
+    hoof_punch = sum(stream_hoof_punch),
+    trampling = sum(stream_trample),
+    manure = sum(stream_manure),
+    grazing = sum(stream_grazing),
+    trail = sum(stream_trail)
+    )
+
+stream_summary
+
+# next step -- analysis with restoration structures
+# also start writing up what we have so far!
+
+```
+
+# 5: Subset plots in meadow areas with restoration structures for that analysis/comparison
+Just remove the ones with nearby structures listed as "none"? Or subset based on geographical region?
+
+
+
+# 6: Potential additional GIS components
+- Distance to stream for plots with >max field distance
+- Distribution up meadow vs down meadow for headwaters component
+
+
+
+# Previous analyses and visualizations
+
+```{r dist-water}
+
+
+cattle_early %>%
+  ggplot(aes(x = closest_water_distance_2, y = percent_hoof_punch)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+cattle_early %>%
+  ggplot(aes(x = percent_water, y = percent_hoof_punch)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+cattle_late %>%
+  ggplot(aes(x = percent_water, y = percent_hoof_punch)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+# not sure how HGM categories fit into this model
+m.hoof.punch <- lm(percent_hoof_punch ~ closest_water_distance_2 + percent_water + 
+                        percent_herb + percent_canopy + percent_dc,
+                    data = cattle_early)
+summary(m.hoof.punch)
+
+# later plot sampling
+# maybe want to do this as the subset of repeat plots with a repeated measures structure?
+m.late.hoof.punch <- lm(percent_hoof_punch ~ closest_water_distance_2 + percent_water + 
+                        percent_herb + percent_canopy + percent_dc,
+                    data = cattle_late)
+summary(m.late.hoof.punch)
+
+# trampling old linear model
+m.trample <- lm(percent_trample ~ closest_water_distance_2 + percent_water + 
+                        percent_herb + percent_canopy + percent_dc,
+                    data = cattle_early)
+summary(m.trample)
+
+
+
+
+
+
+# Is the DC and percent water info overlapping?
+# Correlated but actually not incredibly tight
+cattle_early %>%
+  ggplot(aes(x = percent_water, y = percent_dc)) +
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "lm") +
+  theme_bw()
+
+
+
+```
+
+
+Old DC and Hoof punch analyses
 
 ```{r dc-punch}
 
 # Is hoof punch percent impact higher where DC is present?
 cattle_early %>% 
-  mutate(dc_present = percent_DC > 0) %>%
   filter(!is.na(dc_present)) %>%
   ggplot(aes(x = dc_present, y = percent_hoof_punch, fill = dc_present)) +
   geom_boxplot() +
@@ -165,77 +497,73 @@ cattle_early %>%
 ```
 
 
-# Broader analyses understanding cattle impacts and water
+Visualizations comparing early visit to late visit
 
-Distance to stream
-Type of water/stream width?
-Location within the meadow (south/headwaters)?
+*TODO: there's at least one row where the date is NA*
+Could switch to the plots with line width to track shifts for the grazing intensity categorical one
+```{r repeat-timing, echo=FALSE}
 
-How to model grazing intensity? 
+# comparing early to later
 
+# DC Grazed
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_dc_grazed, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
+  theme_bw()
+# more grazing on DC as time goes on
 
-What can we do with stream impact data? Would like to look at how cattle impact on nearby streams is impacted by restoration structures
+# Overall grazing intensity
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = grazing_intensity, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
+  theme_bw()
 
-
-Switch to beta distributions for percent cover variables?
-```{r dist-water}
-
-
-cattle_early %>%
-  ggplot(aes(x = closest_water_distance_2, y = percent_hoof_punch)) +
-  geom_point(position = position_jitter()) +
-  geom_smooth(method = "lm") +
+# % Trample
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_trample, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
   theme_bw()
 
 
-cattle_early %>%
-  ggplot(aes(x = percent_water, y = percent_hoof_punch)) +
-  geom_point(position = position_jitter()) +
-  geom_smooth(method = "lm") +
-  theme_bw()
-
-cattle_late %>%
-  ggplot(aes(x = percent_water, y = percent_hoof_punch)) +
-  geom_point(position = position_jitter()) +
-  geom_smooth(method = "lm") +
+# % Hoof Punch
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_hoof_punch, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
   theme_bw()
 
 
-# not sure how HGM categories fit into this model
-m.hoof.punch <- lm(percent_hoof_punch ~ closest_water_distance_2 + percent_water + 
-                       restoration_location_2,
-                    data = cattle_early)
-summary(m.hoof.punch)
-
-# later plot sampling
-m.late.hoof.punch <- lm(percent_hoof_punch ~ closest_water_distance_2 + percent_water + 
-                       restoration_location_2,
-                    data = cattle_late)
-summary(m.late.hoof.punch)
-
-
-
-# Is the DC and percent water info overlapping?
-# Correlated but actually not incredibly tight
-Cattle_Early %>%
-  ggplot(aes(x = percent_water, y = percent_dc)) +
-  geom_point(position = position_jitter()) +
-  geom_smooth(method = "lm") +
+# Manure Count
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = manure_count, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
   theme_bw()
 
 
-m.trample <- lm(percent_trample ~ closest_water_distance_2 + percent_water + 
-                       restoration_location_2,
-                    data = cattle_early)
-summary(m.trample)
+# Indicators of how well plots are re-located:
 
+# percent shrub
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_shrub, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
+  theme_bw()
 
-m.manure <- lm(manure_count ~ closest_water_distance_2 + percent_water + 
-                       restoration_location_2,
-                    data = cattle_early)
-summary(m.manure)
+# percent_rock
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_rock, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
+  theme_bw()
 
+# canopy
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_canopy, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
+  theme_bw()
+
+# percent_dc
+cattle_impact_repeat %>%
+  ggplot(aes(x = timing, y = percent_dc, group = plot, color = hgm_2)) +
+  geom_line(position = position_jitter()) +
+  theme_bw()
 
 
 ```
-
