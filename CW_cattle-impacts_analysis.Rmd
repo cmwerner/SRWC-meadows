@@ -15,8 +15,9 @@ library(ordinal)
 ## Reading in Data
 
 To Do: decide how to consider streams beyond search distance from plot -- arbitrary large distance or use GIS to get spatial analysis distance
+Or consider taking out the distance to water component, since so many plots have 0s with water in the plot
 
-```{r cars}
+```{r data-cleaning}
 cattle_impact_full <- read.csv("Cleaned_Capstone_Data.csv") %>% # reading in csv
   rename_with(tolower) %>%
   rename(  # cleaning up and simplifying column names
@@ -44,9 +45,6 @@ cattle_impact <- cattle_impact_full  %>%
   #         closest_water_distance, water_type, restoration_location,
   #         stream_restoration_type:cattle_trail_crossing_or_bedding_area) %>%  # selecting relevant columns
   mutate(
-    restoration_location_2 = case_when(
-      restoration_location %in% c("Both", "Inside", "Downstream") ~ "in_or_downstream", 
-      TRUE ~ "none_or_upstream"),
     
     cattle_impact_on_stream = str_trim(cattle_impact_on_stream),
     
@@ -56,6 +54,15 @@ cattle_impact <- cattle_impact_full  %>%
       hgm %in% c("Riparian_Mid_Gradient", "Riparian_High_Gradient") ~ "Riparian",
       hgm %in% c("Subsurface_Low_Gradient", "Subsurface_Mid_Gradient", "Subsurface_High_Gradient") ~ "Subsurface",
       TRUE ~ hgm),
+    
+    restoration_location = replace_na(str_trim(restoration_location), "None"),
+    
+    restoration_location_2 = case_when(
+      restoration_location %in% c("Both", "Inside", "Downstream") ~ "in_or_downstream", 
+      restoration_location == "Upstream" ~ "upstream",
+      TRUE ~ "none"),
+    
+    stream_restoration_type = replace_na(str_trim(stream_restoration_type), "None"),
     
     hoof_punch_present = case_when(
       percent_hoof_punch > 0 ~ "yes",
@@ -129,6 +136,53 @@ cattle_impact_repeat <- cattle_impact %>%
 
 
 ```
+
+# 0: Summaries of cattle impacts
+
+Want to also add information like percent water, canopy, water within 5m and within 10 m?
+Would that go into the same table or a separate one?
+
+Also do we want the late summaries here or are they just distracting?
+
+What if the table design goes the other way, with columns under CM and RF for proportion of plots present, median, mean +- sd
+and the rows are the different components of the data? 
+```{r cattle-summaries}
+
+plot_summary <- cattle_impact %>%
+  group_by(timing, watershed) %>%
+  summarise(
+    n = n(), 
+    canopy_mean = mean(percent_canopy), 
+    
+  )
+
+cattle_summary <- cattle_impact %>% 
+  group_by(timing, watershed) %>%
+  summarise(
+    n = n(),
+    grazing_present = sum(grazing_intensity %in% c("Low", "Moderate", "High"))/n, # proportions of plots
+    high_grazing_present = sum(grazing_intensity == "High")/n, 
+    trampling_present = sum(percent_trample > 0)/n,  
+    trampling_median_cover = median(percent_trample),  # means or medians or both?
+    hoof_punch_present = sum(percent_hoof_punch > 0)/n,
+    hoof_punch_median_cover = median(percent_hoof_punch), 
+    manure_present = sum(manure_count > 0, na.rm = TRUE)/n,   # one plot missing manure count
+    manure_median_count = median(manure_count, na.rm = TRUE)
+    
+    # maybe better not as sd but as range/quartiles? Since sd > median for most of these, asymmetrical values
+    # in that case is a table most useful or a chart? 
+    #    trampling_sd = sd(percent_trample),
+    
+    #    hoof_punch_sd = sd(percent_hoof_punch),
+    #    manure_sd = sd(manure_count, na.rm = TRUE)
+  )
+
+cattle_summary
+
+
+```
+
+
 
 
 # 1: Predictors of cattle impacts
@@ -361,16 +415,18 @@ Need to think about whether to include late survey data here too
 # filtering to plots where streams were present within 50m (stream impact data was recorded)
 cattle_streams <- cattle_impact %>% 
   filter(!is.na(closest_water_distance)) %>%
-  select(plot, hgm, watershed, timing,
+  select(plot, hgm_2, watershed, timing,
          stream_impacts, 
          stream_incised:stream_trail,
-         restoration_location, stream_restoration_type,
+         restoration_location, restoration_location_2, 
+         stream_restoration_type,
          water_type_within_5m, water_type_within_10m)
+
 
 length(unique(cattle_streams$plot))  # 132 plots with stream data recorded in early, 136 total for both visits
 
 stream_summary <- cattle_streams %>% 
-  group_by(watershed, timing) %>%
+  group_by(timing, watershed) %>%
   summarise(
     n = n(),
     incised = sum(stream_incised),
@@ -384,14 +440,45 @@ stream_summary <- cattle_streams %>%
 
 stream_summary
 
-# next step -- analysis with restoration structures
-# also start writing up what we have so far!
+# what else can we ask about cattle impacts on streams?
 
 ```
+
 
 # 5: Subset plots in meadow areas with restoration structures for that analysis/comparison
 Just remove the ones with nearby structures listed as "none"? Or subset based on geographical region?
 
+```{r restoration-structures}
+
+# next step -- analysis with restoration structures
+
+stream_early <- cattle_streams %>% filter(timing == "Early")
+
+# binomial model
+m.incised <- glmmTMB(stream_incised ~ restoration_location + 
+                      # stream_restoration_type +
+                         watershed + (1|hgm_2),
+                       data = stream_early, 
+                       family = binomial(link = "logit"))
+summary(m.incised)
+
+
+m.sloughing <- glmmTMB(stream_sloughing ~ restoration_location + 
+                      # stream_restoration_type +
+                         watershed + (1|hgm_2),
+                       data = stream_early, 
+                       family = binomial(link = "logit"))
+summary(m.sloughing)
+
+
+m.hp <- glmmTMB(stream_hoof_punch ~ restoration_location + 
+                      # stream_restoration_type +
+                         watershed + (1|hgm_2),
+                       data = stream_early, 
+                       family = binomial(link = "logit"))
+summary(m.hp)
+
+```
 
 
 # 6: Potential additional GIS components
