@@ -156,6 +156,29 @@ plot_summary <- cattle_impact %>%
     
   )
 
+plot_summary <- cattle_impact %>% 
+  group_by(timing,watershed) %>%
+  summarise(
+    n = n(),
+    across(starts_with("percent"), list(present = ~ sum(.x > 0, na.rm = TRUE)/n,
+                                        median = ~ median(.x, na.rm = TRUE), 
+                                        mean = ~ mean(.x, na.rm = TRUE), 
+                                        sd = ~ sd(.x, na.rm = TRUE))
+    )
+  ) 
+
+plot_summary_long <- plot_summary %>%
+  select(-n) %>%
+  pivot_longer(
+    cols = starts_with("percent")
+    ) %>%
+#  ungroup() %>%
+#  mutate(
+#    watershed_timing = paste(watershed, timing, sep = "_"), .keep = "unused"
+#  ) %>%
+  separate_wider_regex(name, c(component = ".*", "_", metric = ".*")) %>%
+  pivot_wider(names_from = metric, values_from = value)
+
 cattle_summary <- cattle_impact %>% 
   group_by(timing, watershed) %>%
   summarise(
