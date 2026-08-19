@@ -10,6 +10,7 @@ library(tidyverse)
 library(glmmTMB)
 library(lubridate)
 library(ordinal)
+library(patchwork)
 ```
 
 ## Reading in Data
@@ -83,6 +84,13 @@ cattle_impact <- cattle_impact_full  %>%
       percent_dc_grazed == 0 ~ 0.001,
       TRUE ~ percent_dc_grazed/100),
     
+    percent_water_2 = percent_water/100,
+    percent_herb_2 = percent_herb/100,
+    percent_canopy_2 = percent_canopy/100,
+    percent_shrub_2 = percent_shrub/100,
+    percent_bare_2 = percent_bare/100,
+    percent_litter_2 = percent_litter/100,
+    
     # If stream distance wasn't recorded it was > 50m, so putting that in as our minimum for now
     closest_water_distance_2 = case_when(
       is.na(closest_water_distance) ~ 50, 
@@ -135,6 +143,14 @@ cattle_impact_repeat <- cattle_impact %>%
   arrange(plot)
 
 
+# details for plots
+watershed.cols <- c("seagreen3", "darkorchid3")
+watershed.labels = as_labeller(c(
+  CM = "Cabin Meadows",
+  RF = "Rock Fence"))
+
+
+
 ```
 
 # 0: Summaries of cattle impacts
@@ -148,63 +164,121 @@ What if the table design goes the other way, with columns under CM and RF for pr
 and the rows are the different components of the data? 
 ```{r cattle-summaries}
 
-plot_summary <- cattle_impact %>%
-  group_by(timing, watershed) %>%
-  summarise(
-    n = n(), 
-    canopy_mean = mean(percent_canopy), 
-    
-  )
 
 plot_summary <- cattle_impact %>% 
   group_by(timing,watershed) %>%
   summarise(
     n = n(),
-    across(starts_with("percent"), list(present = ~ sum(.x > 0, na.rm = TRUE)/n,
-                                        median = ~ median(.x, na.rm = TRUE), 
-                                        mean = ~ mean(.x, na.rm = TRUE), 
-                                        sd = ~ sd(.x, na.rm = TRUE))
+    across(starts_with(c("percent", "manure")), 
+           list(present = ~ sum(.x > 0, na.rm = TRUE)/n,
+                median = ~ median(.x, na.rm = TRUE), 
+                mean = ~ mean(.x, na.rm = TRUE), 
+                sd = ~ sd(.x, na.rm = TRUE))
     )
   ) 
 
 plot_summary_long <- plot_summary %>%
   select(-n) %>%
   pivot_longer(
-    cols = starts_with("percent")
+    cols = starts_with(c("percent", "manure"))
     ) %>%
-#  ungroup() %>%
-#  mutate(
-#    watershed_timing = paste(watershed, timing, sep = "_"), .keep = "unused"
-#  ) %>%
   separate_wider_regex(name, c(component = ".*", "_", metric = ".*")) %>%
   pivot_wider(names_from = metric, values_from = value)
 
-cattle_summary <- cattle_impact %>% 
+
+# formatting for table
+plot_summary_meadow <- plot_summary_long %>% 
+  pivot_wider(
+    names_from = watershed, 
+    values_from = present:sd,
+    names_glue = "{watershed}_{.value}",
+    names_vary = "slowest"
+  ) %>%
+  mutate(
+    across(starts_with(c("CM", "RF")), ~ signif(.x, digits = 2)),
+    CM_mean_sd = paste(CM_mean, "±", CM_sd),
+    RF_mean_sd = paste(RF_mean, "±", RF_sd)
+  ) %>%
+  select(timing, component, CM_present, CM_median, CM_mean_sd,
+         RF_present, RF_median, RF_mean_sd) 
+  
+# write plot composition table
+plot_summary_meadow %>%
+  filter(component %in% c("percent_canopy", "percent_herb",
+                          "percent_shrub", "percent_bare", 
+                          "percent_litter", "percent_rock",
+                          "percent_woody","percent_water",
+                          "percent_dc", "manure_count",
+                          "percent_trample", "percent_hoof_punch",
+                          "percent_dc_grazed")) %>%
+  write.csv(file = "SRWC_cattle-impacts_plot-summary.csv")
+
+
+# additional cattle components 
+# (could pivot_longer this and rbind this in to cattle impact table)
+cattle_additional <- cattle_impact %>% 
   group_by(timing, watershed) %>%
   summarise(
     n = n(),
     grazing_present = sum(grazing_intensity %in% c("Low", "Moderate", "High"))/n, # proportions of plots
     high_grazing_present = sum(grazing_intensity == "High")/n, 
-    trampling_present = sum(percent_trample > 0)/n,  
-    trampling_median_cover = median(percent_trample),  # means or medians or both?
-    hoof_punch_present = sum(percent_hoof_punch > 0)/n,
-    hoof_punch_median_cover = median(percent_hoof_punch), 
-    manure_present = sum(manure_count > 0, na.rm = TRUE)/n,   # one plot missing manure count
-    manure_median_count = median(manure_count, na.rm = TRUE)
-    
-    # maybe better not as sd but as range/quartiles? Since sd > median for most of these, asymmetrical values
-    # in that case is a table most useful or a chart? 
-    #    trampling_sd = sd(percent_trample),
-    
-    #    hoof_punch_sd = sd(percent_hoof_punch),
-    #    manure_sd = sd(manure_count, na.rm = TRUE)
   )
 
-cattle_summary
-
+cattle_additional
 
 ```
 
+Similar summaries but not separated by watershed or timing
+```{r overall-summary}
+
+overall_summary <- cattle_impact %>% 
+#  group_by(timing,watershed) %>%
+  summarise(
+    n = n(),
+    across(starts_with(c("percent", "manure")), list(present = ~ sum(.x > 0, na.rm = TRUE)/n,
+                                        median = ~ median(.x, na.rm = TRUE), 
+                                        mean = ~ mean(.x, na.rm = TRUE), 
+                                        sd = ~ sd(.x, na.rm = TRUE),
+                                        min = ~ min(.x, na.rm = TRUE),
+                                        max = ~ max(.x, na.rm = TRUE))
+    )
+  ) 
+
+overall_summary_long <- overall_summary %>%
+  select(-n) %>%
+  pivot_longer(
+    cols = starts_with(c("percent", "manure"))
+    ) %>%
+  separate_wider_regex(name, c(component = ".*", "_", metric = ".*")) %>%
+  pivot_wider(names_from = metric, values_from = value) 
+
+# formatting for table
+overall_summary_long %>% mutate(
+    across(present:sd, ~ signif(.x, digits = 2)),
+    mean_sd = paste(mean, "±", sd),
+    range = paste(min, "—", max)
+    ) %>% 
+  select(component, present, median, mean_sd, range) %>%
+  filter(component %in% c("percent_canopy", "percent_herb",
+                          "percent_shrub", "percent_bare", 
+                          "percent_litter", "percent_rock",
+                          "percent_woody","percent_water",
+                          "percent_dc", "manure_count",
+                          "percent_trample", "percent_hoof_punch",
+                          "percent_dc_grazed")) %>%
+  write.csv(file = "SRWC_cattle-impacts_overall-summary.csv")
+
+overall_cattle_additional <- cattle_impact %>% 
+  summarise(
+    n = n(),
+    grazing_present = sum(grazing_intensity %in% c("Low", "Moderate", "High"))/n, # proportions of plots
+    high_grazing_present = sum(grazing_intensity == "High")/n
+  )
+
+overall_cattle_additional
+
+
+```
 
 
 
@@ -214,15 +288,50 @@ How to model grazing intensity?
 ```{r cattle-impacts}
 
 # hoof punch with beta distribution
-glm.hoof.punch <- glmmTMB(percent_hoof_punch_2 ~ closest_water_distance_2 + 
-                            percent_water + 
-                            percent_herb + 
-                            percent_canopy + 
+glm.hoof.punch <- glmmTMB(percent_hoof_punch_2 ~ 
+                            closest_water_distance_2 + 
+                            percent_water_2 + 
+                            percent_herb_2 + 
+                            percent_canopy_2 + 
                             watershed +
                             (1|hgm_2),
                           data = cattle_early,
                           family = beta_family(link = "logit"))
 summary(glm.hoof.punch)
+
+p.hoof.punch.water <- cattle_early %>% 
+  ggplot(aes(x = percent_water, y = percent_hoof_punch, 
+             color = watershed, fill = watershed)) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.5), alpha = 0.7) +
+  scale_color_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  scale_fill_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  xlab("Water cover (%)") +
+  ylab("Hoof punch (%)") +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  theme_bw() +
+  theme(legend.position = "inside", legend.position.inside = c(0.3, 0.8))
+
+p.hoof.punch.herb <- cattle_early %>% 
+  ggplot(aes(x = percent_herb, y = percent_hoof_punch, 
+             color = watershed, fill = watershed)) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.5), alpha = 0.7) +
+  scale_color_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  scale_fill_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  xlab("Herbaceous cover (%)") +
+  ylab("Hoof punch (%)") +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+p.hoof.punch.herb + p.hoof.punch.water
+
+ggsave("Figures/hoof-punch.pdf", width = 7, height = 4, units = "in")
+
+
 
 # trampling with beta distribution
 glm.trample <- glmmTMB(percent_trample_2 ~ closest_water_distance_2 + 
@@ -246,6 +355,65 @@ glm.manure <- glmmTMB(manure_count ~ closest_water_distance_2 +
                       data = cattle_early, 
                       family = poisson(link = "log"))
 summary(glm.manure)
+
+p.manure.canopy <- cattle_early %>% 
+  ggplot(aes(x = percent_canopy, y = manure_count, 
+             color = watershed, fill = watershed)) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.5), alpha = 0.7) +
+  scale_color_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  scale_fill_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  xlab("Canopy cover (%)") +
+  ylab("Manure count") +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+p.manure.herb <- cattle_early %>% 
+  ggplot(aes(x = percent_herb, y = manure_count, 
+             color = watershed, fill = watershed)) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.5), alpha = 0.7) +
+  scale_color_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  scale_fill_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  xlab("Herbaceous cover (%)") +
+  ylab("Manure count") +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  theme_bw() +
+  theme(legend.position = "inside", legend.position.inside = c(0.7, 0.8))
+
+p.manure.water <- cattle_early %>% 
+  ggplot(aes(x = percent_water, y = manure_count, 
+             color = watershed, fill = watershed)) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.5), alpha = 0.7) +
+  scale_color_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  scale_fill_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  xlab("Water cover (%)") +
+  ylab("Manure count") +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+p.manure.water.2 <- cattle_early %>% 
+  ggplot(aes(x = closest_water_distance, y = manure_count, 
+             color = watershed, fill = watershed)) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.5), alpha = 0.7) +
+  scale_color_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  scale_fill_manual(values = watershed.cols, labels = watershed.labels, 
+                     name = "Watershed") +
+  xlab("Distance to water (m)") +
+  ylab("Manure count") +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+p.manure.canopy + p.manure.herb + p.manure.water + p.manure.water.2
+ggsave("Figures/manure.pdf", width = 7, height = 6, units = "in")
 
 
 # Ordinal grazing intensity data -- cumulative link models using the 'ordinal' package
@@ -353,22 +521,30 @@ summary(m.dc.hoofpunch)
 # 3: Comparing cattle impacts in early and late seasons
 ```{r timing}
 
+timing_cols <- c('steelblue', 'darkgoldenrod')
+
 # hoof punch
 mtime.hoof.punch <- glmmTMB(percent_hoof_punch_2 ~ timing*closest_water_distance_2 + 
                               timing*percent_water + 
                               timing*percent_herb + 
                               timing*percent_canopy + 
+                              watershed +
                             (1|plot),
                             data = cattle_impact_repeat,
                             family = beta_family(link = "logit"))
 summary(mtime.hoof.punch)
 
-cattle_impact_repeat %>% 
+p.time.hoof.punch <- cattle_impact_repeat %>% 
   ggplot(aes(x = percent_water, y = percent_hoof_punch_2, 
              color = timing, fill = timing)) +
   geom_point(position = position_jitter()) +
   geom_smooth(method = "lm") +
-  theme_bw()
+  scale_color_manual(values = timing_cols) +
+  scale_fill_manual(values = timing_cols) +
+  xlab("Water cover (%)") +
+  ylab("Hoof punch (%)") +
+  theme_bw() +
+  theme(legend.position = "inside", legend.position.inside = c(0.8, 0.85))
 
 
 # trampling
@@ -392,13 +568,20 @@ mtime.manure <- glmmTMB(manure_count ~ timing*closest_water_distance_2 +
                             family = poisson(link = "log"))
 summary(mtime.manure)
 
-cattle_impact_repeat %>% 
+p.time.manure <- cattle_impact_repeat %>% 
   ggplot(aes(x = closest_water_distance_2, y = manure_count, 
              color = timing, fill = timing)) +
   geom_point(position = position_jitter()) +
   geom_smooth(method = "lm") +
-  theme_bw()
+  scale_color_manual(values = timing_cols) +
+  scale_fill_manual(values = timing_cols) +
+  xlab("Distance to nearest water (m)") +
+  ylab("Manure count") +
+  theme_bw() +
+  theme(legend.position = "none")
 
+p.time.manure + p.time.hoof.punch
+ggsave("Figures/timing.pdf", width = 7, height = 4, units = "in")
 
 # grazing intensity
 mtime.grazing <- glmmTMB(grazing_high ~ timing*closest_water_distance_2 + 
@@ -452,16 +635,29 @@ stream_summary <- cattle_streams %>%
   group_by(timing, watershed) %>%
   summarise(
     n = n(),
-    incised = sum(stream_incised),
-    sloughing = sum(stream_sloughing),
-    hoof_punch = sum(stream_hoof_punch),
-    trampling = sum(stream_trample),
-    manure = sum(stream_manure),
-    grazing = sum(stream_grazing),
-    trail = sum(stream_trail)
+    incised = sum(stream_incised)/n,
+    sloughing = sum(stream_sloughing)/n,
+    hoof_punch = sum(stream_hoof_punch)/n,
+    trampling = sum(stream_trample)/n,
+    manure = sum(stream_manure)/n,
+    grazing = sum(stream_grazing)/n,
+    trail = sum(stream_trail)/n
     )
 
-stream_summary
+stream_summary_long <- stream_summary %>%
+  select(-n) %>%
+  pivot_longer(
+    cols = incised:trail
+  ) %>%
+  pivot_wider(
+    names_from = watershed, 
+    values_from = value,
+  ) %>%
+  mutate(
+    across(starts_with(c("CM", "RF")), ~ signif(.x, digits = 2)),
+  )
+write.csv(stream_summary_long, file = "SRWC_cattle-impacts_stream-summary.csv") 
+
 
 # what else can we ask about cattle impacts on streams?
 
@@ -507,6 +703,7 @@ summary(m.hp)
 # 6: Potential additional GIS components
 - Distance to stream for plots with >max field distance
 - Distribution up meadow vs down meadow for headwaters component
+- Assign meadow polygons for random factor rather than HGM type
 
 
 
