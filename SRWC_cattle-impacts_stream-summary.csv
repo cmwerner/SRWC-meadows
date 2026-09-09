@@ -1,0 +1,17 @@
+"","timing","name","CM","RF"
+"1","Early","any",0.89,0.88
+"2","Early","incised",0.28,0.12
+"3","Early","sloughing",0.24,0.23
+"4","Early","hoof_punch",0.52,0.46
+"5","Early","trampling",0.54,0.58
+"6","Early","manure",0.28,0.27
+"7","Early","grazing",0.72,0.54
+"8","Early","trail",0.057,0
+"9","Late","any",0.93,0.91
+"10","Late","incised",0.1,0
+"11","Late","sloughing",0.1,0
+"12","Late","hoof_punch",0.69,0.64
+"13","Late","trampling",0.76,0.73
+"14","Late","manure",0.24,0.18
+"15","Late","grazing",0.62,0.64
+"16","Late","trail",0,0

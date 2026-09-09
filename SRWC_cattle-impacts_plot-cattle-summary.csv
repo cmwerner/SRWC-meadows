@@ -1,0 +1,7 @@
+"","timing","component","CM_present","CM_median","CM_mean_sd","RF_present","RF_median","RF_mean_sd"
+"1","Early","percent_trample",0.78,8,"11 ± 12",0.66,5,"9.1 ± 9.7"
+"2","Early","percent_hoof_punch",0.3,0,"1.8 ± 3.7",0.47,0,"3.5 ± 6.6"
+"3","Early","percent_dc_grazed",0.14,0,"0.72 ± 2.2",0.19,0,"1.9 ± 5.7"
+"4","Late","percent_trample",0.75,8.5,"8.3 ± 7.7",0.73,12,"12 ± 10"
+"5","Late","percent_hoof_punch",0.33,0,"2.1 ± 4.8",0.27,0,"2.1 ± 4"
+"6","Late","percent_dc_grazed",0.22,0,"3.4 ± 8.1",0.27,0,"7.4 ± 17"
