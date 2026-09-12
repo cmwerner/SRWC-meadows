@@ -12,6 +12,7 @@ library(lubridate)
 library(lme4)
 library(glmmTMB)
 library(emmeans)
+library(patchwork)
 
 # list of wet meadow vs dry meadow blocks
 wet.blocks <- c(2, 3, 5, 6, 8)
@@ -25,8 +26,20 @@ cattle.ex <- read.csv("data/SRWC-cattle-exclosure_post-treatment_2026-09-04.csv"
   mutate(date = as.Date(date, "%m/%d/%y"),
          plot = paste0(block, position),
          height.mean = (height.1 + height.2 + height.3 + height.4)/4,
-         meadow.type = case_when(block %in% wet.blocks ~ "wet", 
-                                 TRUE ~ "dry"))
+         meadow.type = case_when(
+           block %in% wet.blocks ~ "wet", 
+           TRUE ~ "dry"),
+         trample.both = case_when(  # split hoof punch and trampling in 2026, not in previous years
+           is.na(hoof_punch) ~ trample,
+           TRUE ~ trample + hoof_punch
+         ),
+         year = year(date),
+         timing = case_when(
+           month(date) == 9 ~ "end of season",
+           month(date) == 8 & day(date) == 31 ~ "end of season",
+           TRUE ~ "mid season"
+         )
+  )
 
 
 
@@ -44,8 +57,8 @@ cattle.control <- cattle.ex %>%
     litter.control = litter[treatment == "control"][1],
     litter.diff = litter - litter.control,
     
-    trample.control = trample[treatment == "control"][1],
-    trample.diff = trample - trample.control,
+    trample.control = trample.both[treatment == "control"][1],
+    trample.diff = trample.both - trample.control,
     
     water.control = water[treatment == "control"][1],
     water.diff = water - water.control,
@@ -54,13 +67,17 @@ cattle.control <- cattle.ex %>%
     dc.diff = darlingtonia - dc.control,
     
     grazed.control = grazed.perc[treatment == "control"][1],
-    grazed.diff = grazed.perc - grazed.control
+    grazed.diff = grazed.perc - grazed.control,
+    
+    manure.control = manure.count[treatment == "control"][1],
+    manure.diff = manure.count - manure.control
   ) %>%
   ungroup()
 
 # Compare to first year data, September visit only for now
+# add water for this too?
 cattle.change <- cattle.ex %>% 
-  filter(month(date) == 9 | (month(date) == 8 & day(date) == 31)) %>%
+  filter(timing == "end of season") %>%
   group_by(plot) %>%
   mutate(
     first.date = min(date),
@@ -79,65 +96,132 @@ Or we can try to compare first year's data to third year's data and look at what
 
 ```{r visualizations-control}
 
+treat.cols.3 <- c("turquoise3","darkblue","dodgerblue")
+treat.cols.4 <- c("salmon2", "turquoise3","darkblue","dodgerblue")
 
 # trampling impact compared to control
-cattle.control %>% 
+p.trample <- cattle.control %>% 
+  filter(treatment %in% c("early", "late", "full")) %>%
   ggplot(aes(x = date, y = trample.diff, 
              color = treatment, shape = meadow.type, 
              group = plot)) +
-  geom_point(position = position_dodge(width = 10)) +
-#  geom_line(position = position_dodge(width = 50)) +
-  theme_bw() 
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 0.5),
+             size = 2, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Trample % cover difference from control plot") +
+  theme_bw() +
+  theme(legend.box = "horizontal", legend.position = c(0.4, 0.85),
+        legend.background = element_rect(fill = "transparent"),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 9.5),
+        legend.key.size = unit(0.4, "cm")) 
 
 
 # grazed percent compared to control
-cattle.control %>%
+p.grazed <- cattle.control %>%
   filter(treatment %in% c("early", "late", "full")) %>%
   ggplot(aes(x = date, y = grazed.diff, 
              color = treatment, shape = meadow.type)) +
-  geom_point(position = position_jitterdodge(dodge.width = 30, jitter.width = 5),
-             alpha = 0.7) +
-  theme_bw() 
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 0.5),
+             size = 2, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Grazing % cover difference from control plot") +
+  theme_bw() +
+  theme(legend.position = "none")
 
 
 # veg height compared to control
-cattle.control %>%
+p.veg.height <- cattle.control %>%
   filter(treatment %in% c("early", "late", "full")) %>%
   ggplot(aes(x = date, y = height.diff, 
              color = treatment, shape = meadow.type)) +
-  geom_point(position = position_jitterdodge(dodge.width = 30, jitter.width = 5),
-             alpha = 0.7) +
-  theme_bw() 
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 0.5),
+             size = 2, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Vegetation height difference from control plot") +
+  theme_bw() +
+  theme(legend.position = "none")
 
 
 # veg cover compared to control
-cattle.control %>% 
+p.veg.cover <- cattle.control %>% 
   filter(treatment %in% c("early", "late", "full")) %>%
   ggplot(aes(x = date, y = veg.diff, 
              color = treatment, shape = meadow.type, group = plot)) +
-  geom_point(position = position_jitterdodge(dodge.width = 30, jitter.width = 5),
-             alpha = 0.7) +
-  theme_bw()
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 1),
+             size = 2, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  #  geom_line(position = position_dodge(width = 50)) +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Vegetation % cover difference from control plot") +
+  theme_bw() +
+  theme(legend.position = "none")
 
 # litter cover compared to control
-cattle.control %>% 
+p.litter <- cattle.control %>% 
   filter(treatment %in% c("early", "late", "full")) %>%
   ggplot(aes(x = date, y = litter.diff, 
              color = treatment, shape = meadow.type, group = plot)) +
-  geom_point(position = position_jitterdodge(dodge.width = 30, jitter.width = 5),
-             alpha = 0.7) +
-  theme_bw()
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 1),
+             size = 2, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  #  geom_line(position = position_dodge(width = 50)) +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Litter % cover difference from control plot") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+
+# manure count compared to control
+p.manure <- cattle.control %>% 
+  filter(treatment %in% c("early", "late", "full")) %>%
+  ggplot(aes(x = date, y = manure.diff, 
+             color = treatment, shape = meadow.type, group = plot)) +
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 0.1),
+             size = 2, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  #  geom_line(position = position_dodge(width = 50)) +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Manure count difference from control plot") +
+  theme_bw() +
+  theme(legend.position = c("none"))
+
+# putting plots together
+p.manure + p.trample + p.grazed + p.veg.height + p.veg.cover + p.litter +
+  plot_layout(nrow = 3)
+ggsave(filename = "Figures/cattle-exclosures.pdf", width = 8, height = 10)
+
 
 # water cover compared to control
-cattle.control %>%
+p.water <- cattle.control %>%
   filter(treatment %in% c("early", "late", "full")) %>%
   ggplot(aes(x = date, y = water.diff, 
              color = treatment, shape = meadow.type,
              group = plot)) +
-  geom_point(position = position_jitterdodge(dodge.width = 30, jitter.width = 5),
-             alpha = 0.7) +
-#  geom_line() +
-  theme_bw() 
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 1),
+             size = 2, alpha = 0.8) +
+  #  geom_line(position = position_dodge(width = 50)) +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("Water % cover difference from control plot") +
+  theme_bw() +
+  theme(legend.position = "none")
 
 
 # Dc cover compared to control
@@ -146,10 +230,15 @@ cattle.control %>%
   ggplot(aes(x = date, y = dc.diff, 
              color = treatment, shape = meadow.type,
              group = plot)) +
-  geom_point(position = position_jitterdodge(dodge.width = 30, jitter.width = 5),
-             alpha = 0.7) +
-#  geom_line() +
-  theme_bw() 
+  geom_point(position = position_jitterdodge(dodge.width = 50, jitter.width = 10, jitter.height = 1),
+             size = 2, alpha = 0.8) +
+  #  geom_line(position = position_dodge(width = 50)) +
+  scale_color_manual(values = treat.cols.3, name = "Exclosure treatment") +
+  scale_shape_manual(values = c(16, 17), name = "Meadow type") +
+  xlab("Survey Date") +
+  ylab("DC % cover difference from control plot") +
+  theme_bw() +
+  theme(legend.position = "none")
 
 # Dc cover raw data through time
 cattle.control %>% 
@@ -181,23 +270,102 @@ Also switching to a beta distribution for the models, which is probably a good i
 cattle.control <- cattle.control %>%
   mutate(
     trample.2 = case_when(
-      trample == 0 ~ 0.001,
-      trample == 100 ~ 0.999,
-      TRUE ~ trample/100),
+      trample.both == 0 ~ 0.001,
+      trample.both == 100 ~ 0.999,
+      TRUE ~ trample.both/100),
+    
     darlingtonia.2 = case_when(
       darlingtonia == 0 ~ 0.001,
       darlingtonia == 100 ~ 0.999,
-      TRUE ~ darlingtonia/100
-    )
+      TRUE ~ darlingtonia/100),
+    
+    veg.2 = case_when(
+      veg.cover == 0 ~ 0.001,
+      veg.cover == 100 ~ 0.999,
+      TRUE ~ veg.cover/100),
+    
+    litter.2 = case_when(
+      litter == 0 ~ 0.001,
+      litter  == 100 ~ 0.999,
+      TRUE ~ litter /100),
+    
+    water.2 = case_when(
+      water == 0 ~ 0.001,
+      water == 100 ~ 0.999,
+      TRUE ~ water /100),
+    
+    grazed.2 = case_when(
+      grazed.perc== 0 ~ 0.001,
+      grazed.perc == 100 ~ 0.999,
+      TRUE ~ grazed.perc /100)
+    
   )
 
-# trampling 
-m.time.trample <- glmmTMB(trample.2 ~ treatment + (1|date) + (1|block/plot),
+# grazing across meadow types and years
+m.time.grazed <- glmmTMB(grazed.2 ~ treatment + meadow.type + 
+                            (1|date) + (1|block/plot),
                   data = cattle.control,
                   family = beta_family(link = "logit"))
-emm.time.trample <- emmeans(m.time.trample, specs = ~ treatment)
+summary(m.time.grazed)
+emm.time.grazed <- emmeans(m.time.grazed, specs = ~ treatment,
+                            type = "response")
+emm.time.grazed
+contrast(emm.time.grazed, method = "pairwise")
+
+# trampling across meadow types and years
+m.time.trample <- glmmTMB(trample.2 ~ treatment + meadow.type + 
+                            (1|date) + (1|block/plot),
+                  data = cattle.control,
+                  family = beta_family(link = "logit"))
+summary(m.time.trample)
+emm.time.trample <- emmeans(m.time.trample, specs = ~ treatment,
+                            type = "response")
 emm.time.trample
 contrast(emm.time.trample, method = "pairwise")
+
+# trampling split by meadow type
+m.time.trample.meadow <- glmmTMB(trample.2 ~ treatment*meadow.type + (1|date) + (1|block/plot),
+                  data = cattle.control,
+                  family = beta_family(link = "logit"))
+summary(m.time.trample.meadow) # interaction not significant
+
+# veg height
+m.time.veg <- glmmTMB(height.mean ~ treatment + meadow.type + 
+                            (1|date) + (1|block/plot),
+                  data = cattle.control)
+summary(m.time.veg)
+emm.time.veg <- emmeans(m.time.veg, specs = ~ treatment,
+                            type = "response")
+emm.time.veg
+contrast(emm.time.veg, method = "pairwise")
+
+# veg height split by meadow type
+m.time.veg.time <- glmmTMB(height.mean ~ treatment * meadow.type + 
+                            (1|date) + (1|block/plot),
+                  data = cattle.control)
+summary(m.time.veg.time) # interaction not significant
+
+# veg cover
+m.time.veg <- glmmTMB(veg.2 ~ treatment + meadow.type + 
+                            (1|date) + (1|block/plot),
+                  data = cattle.control,
+                  family = beta_family(link = "logit"))
+summary(m.time.veg)
+emm.time.veg <- emmeans(m.time.veg, specs = ~ treatment,
+                            type = "response")
+emm.time.veg
+contrast(emm.time.veg, method = "pairwise")
+
+# litter cover
+m.time.litter <- glmmTMB(litter.2 ~ treatment + meadow.type + 
+                            (1|date) + (1|block/plot),
+                  data = cattle.control,
+                  family = beta_family(link = "logit"))
+summary(m.time.litter)
+emm.time.litter <- emmeans(m.time.litter, specs = ~ treatment,
+                            type = "response")
+emm.time.litter
+contrast(emm.time.litter, method = "pairwise")
 
 # darlingtonia cover
 m.time.dc <- glmmTMB(darlingtonia.2 ~ treatment + (1|date) + (1|block/plot),
@@ -206,6 +374,19 @@ m.time.dc <- glmmTMB(darlingtonia.2 ~ treatment + (1|date) + (1|block/plot),
 emm.time.dc <- emmeans(m.time.dc, specs = ~ treatment)
 emm.time.dc
 contrast(emm.time.dc, method = "pairwise")
+
+
+
+# water cover -- makes more sense to look at change through time?
+m.time.water <- glmmTMB(water.2 ~ treatment + meadow.type + 
+                            (1|date) + (1|block/plot),
+                  data = cattle.control,
+                  family = beta_family(link = "logit"))
+summary(m.time.water )
+emm.time.water  <- emmeans(m.time.water , specs = ~ treatment,
+                            type = "response")
+emm.time.water 
+contrast(emm.time.water , method = "pairwise")
 
 ```
 
